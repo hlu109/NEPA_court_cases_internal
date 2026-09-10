@@ -8,7 +8,7 @@ from pathlib import Path
 from datetime import datetime
 
 # Add project root to Python path
-project_root = Path(__file__).parent.parent.parent
+project_root = Path(__file__).parents[3]
 sys.path.insert(0, str(project_root))
 
 from src.utils import config

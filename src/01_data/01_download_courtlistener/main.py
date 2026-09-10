@@ -14,7 +14,7 @@ from typing import List, Optional
 import pandas as pd
 
 # Add project root to Python path to allow imports from src.utils
-project_root = Path(__file__).parent.parent.parent
+project_root = Path(__file__).parents[3]
 sys.path.insert(0, str(project_root))
 
 from src.utils.logger import get_logger
