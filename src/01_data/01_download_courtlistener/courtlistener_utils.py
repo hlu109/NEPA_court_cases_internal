@@ -14,7 +14,7 @@ from typing import List, Dict, Optional
 import requests
 
 from src.utils.api_utils import _make_request
-from src.utils.config import RUN_DIR, OPINIONS_BASE_DIR, BASE_PDF_URL, CURR_OPINIONS_DIR, TIMEOUT, API_KEY, REQUEST_DELAY
+from src.utils.config import RUN_DIR, BASE_PDF_URL, CURR_OPINIONS_DIR, TIMEOUT, API_KEY, REQUEST_DELAY
 from src.utils.logger import get_logger
 
 # TODO: double check pdf paths
@@ -45,11 +45,7 @@ def get_search_cases(query: str,
         Returns:
             Dictionary with search results
     """
-    params = {
-        'q': query,
-        'type': result_type,
-        'format': 'json'
-    }
+    params = {'q': query, 'type': result_type, 'format': 'json'}
     if highlight is not None:
         params['highlight'] = highlight
 
@@ -138,11 +134,15 @@ def get_all_results(query: str,
 
         # Use next_url if available, otherwise make initial request
         if next_url is not None:
-            response = _make_request(
-                endpoint='', params=None, api_key=api_key, full_url=next_url)
+            response = _make_request(endpoint='',
+                                     params=None,
+                                     api_key=api_key,
+                                     full_url=next_url)
         else:
-            response = get_search_cases(query, result_type=result_type,
-                                        api_key=api_key, highlight=highlight,
+            response = get_search_cases(query,
+                                        result_type=result_type,
+                                        api_key=api_key,
+                                        highlight=highlight,
                                         court=court)
         results = response.get('results', [])
         all_results.extend(results)
@@ -194,7 +194,8 @@ def save_metadata_json(results: List[Dict],
         return str(filepath)
     except Exception as e:
         logger.error(f"Error saving metadata JSON",
-                     exception=e, filename=filename)
+                     exception=e,
+                     filename=filename)
         raise
 
 
@@ -218,15 +219,18 @@ def load_metadata_json(filename: str) -> List[Dict]:
         return data
     except FileNotFoundError as e:
         logger.error(f"Metadata file not found",
-                     exception=e, filename=filename)
+                     exception=e,
+                     filename=filename)
         raise
     except json.JSONDecodeError as e:
         logger.error(f"Error parsing JSON file",
-                     exception=e, filename=filename)
+                     exception=e,
+                     filename=filename)
         raise
     except Exception as e:
         logger.error(f"Error loading metadata JSON",
-                     exception=e, filename=filename)
+                     exception=e,
+                     filename=filename)
         raise
 
 
@@ -243,8 +247,8 @@ def download_opinion_pdf(download_url: str, save_path: str) -> bool:
     # TODO: replace download url with local url from CourListener API response
     logger = get_logger()
     try:
-        logger.debug(
-            f"Downloading PDF from: {download_url}", save_path=str(save_path))
+        logger.debug(f"Downloading PDF from: {download_url}",
+                     save_path=str(save_path))
         response = requests.get(download_url, timeout=TIMEOUT)
         response.raise_for_status()
 
@@ -254,16 +258,22 @@ def download_opinion_pdf(download_url: str, save_path: str) -> bool:
         return True
 
     except requests.exceptions.HTTPError as e:
-        logger.error(f"HTTP error downloading PDF", exception=e,
-                     download_url=download_url, save_path=str(save_path))
+        logger.error(f"HTTP error downloading PDF",
+                     exception=e,
+                     download_url=download_url,
+                     save_path=str(save_path))
         return False
     except requests.exceptions.Timeout as e:
-        logger.error(f"Timeout downloading PDF", exception=e,
-                     download_url=download_url, save_path=str(save_path))
+        logger.error(f"Timeout downloading PDF",
+                     exception=e,
+                     download_url=download_url,
+                     save_path=str(save_path))
         return False
     except Exception as e:
-        logger.error(f"Failed to download PDF", exception=e,
-                     download_url=download_url, save_path=str(save_path))
+        logger.error(f"Failed to download PDF",
+                     exception=e,
+                     download_url=download_url,
+                     save_path=str(save_path))
         return False
 
 
@@ -284,27 +294,29 @@ def download_opinion_html(opinion_id: int, text: str, save_path) -> str:
     try:
         with open(save_path, 'w', encoding='utf-8') as f:
             f.write(text)
-        logger.debug(
-            f"Saved opinion text to: {save_path}", opinion_id=opinion_id)
+        logger.debug(f"Saved opinion text to: {save_path}",
+                     opinion_id=opinion_id)
         return str(save_path)
     except Exception as e:
-        logger.error(f"Error saving opinion text", exception=e,
-                     opinion_id=opinion_id, save_path=str(save_path))
+        logger.error(f"Error saving opinion text",
+                     exception=e,
+                     opinion_id=opinion_id,
+                     save_path=str(save_path))
         raise
 
 
 # TODO: refactor this function and download_all_opinions since lots of duplicate code
 def download_opinions_from_csv(csv_path: str,
+                               output_dir: Path,
                                opinion_id_column: str = 'opinion_id',
-                               output_dir: Optional[Path] = None,
                                existing_downloads_dir: Optional[Path] = None):
     """
     Download opinions from a CSV file, skipping already-downloaded ones
 
     Args:
         csv_path: Path to CSV file containing opinion IDs
+        output_dir: Directory to save new downloads
         opinion_id_column: Name of column containing opinion IDs
-        output_dir: Directory to save new downloads (defaults to new timestamped folder)
         existing_downloads_dir: Directory to check for existing downloads (optional)
     """
     logger = get_logger()
@@ -322,10 +334,7 @@ def download_opinions_from_csv(csv_path: str,
         opinion_ids = df[opinion_id_column].dropna().unique().tolist()
         logger.info(f"Found {len(opinion_ids)} unique opinion IDs in CSV")
 
-        # Set up output directory
-        if output_dir is None:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_dir = OPINIONS_BASE_DIR / f"download_{timestamp}"
+        output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"Output directory: {output_dir}")
 
@@ -333,26 +342,30 @@ def download_opinions_from_csv(csv_path: str,
         already_downloaded = set()
         if existing_downloads_dir and existing_downloads_dir.exists():
             logger.info(
-                f"Checking for existing downloads in: {existing_downloads_dir}")
+                f"Checking for existing downloads in: {existing_downloads_dir}"
+            )
             for opinion_dir in existing_downloads_dir.glob("opinion_*"):
                 try:
                     opinion_id = int(opinion_dir.name.split("_")[1])
                     already_downloaded.add(opinion_id)
                 except (ValueError, IndexError) as e:
                     logger.warning(
-                        f"Could not parse opinion ID from directory: {opinion_dir.name}", exception=e)
+                        f"Could not parse opinion ID from directory: {opinion_dir.name}",
+                        exception=e)
                     continue
             logger.info(
                 f"Found {len(already_downloaded)} already downloaded opinions")
 
         # Filter to only new downloads
         opinions_to_download = [
-            oid for oid in opinion_ids if oid not in already_downloaded]
+            oid for oid in opinion_ids if oid not in already_downloaded
+        ]
         logger.info(f"Will download {len(opinions_to_download)} new opinions")
 
         for i, opinion_id in enumerate(opinions_to_download, 1):
             logger.info(
-                f"[{i}/{len(opinions_to_download)}] Downloading opinion {opinion_id}...")
+                f"[{i}/{len(opinions_to_download)}] Downloading opinion {opinion_id}..."
+            )
 
             # Create opinion-specific directory
             opinion_dir = output_dir / f"opinion_{opinion_id}"
@@ -368,7 +381,8 @@ def download_opinions_from_csv(csv_path: str,
                     text = opinion_data['html_with_citations']
                     if text == "":
                         logger.warning(
-                            f"Empty 'html_with_citations' for opinion {opinion_id}", opinion_id=opinion_id)
+                            f"Empty 'html_with_citations' for opinion {opinion_id}",
+                            opinion_id=opinion_id)
                     else:
                         html_path = opinion_dir / f"opinion_{opinion_id}.html"
                         download_opinion_html(opinion_id, text, html_path)
@@ -389,18 +403,19 @@ def download_opinions_from_csv(csv_path: str,
 
                 # Log success message based on what was saved
                 if html_saved and pdf_saved:
-                    logger.log_download_success(
-                        opinion_id, "HTML and PDF saved")
+                    logger.log_download_success(opinion_id,
+                                                "HTML and PDF saved")
                 elif html_saved:
                     if pdf_url is None:
                         logger.log_download_success(
                             opinion_id, "HTML saved (no PDF available)")
                     else:
-                        logger.log_download_success(
-                            opinion_id, "HTML saved (PDF failed)")
+                        logger.log_download_success(opinion_id,
+                                                    "HTML saved (PDF failed)")
                 else:
                     logger.warning(
-                        f"No HTML content available for opinion {opinion_id}", opinion_id=opinion_id)
+                        f"No HTML content available for opinion {opinion_id}",
+                        opinion_id=opinion_id)
 
                 time.sleep(REQUEST_DELAY)
 
@@ -411,7 +426,8 @@ def download_opinions_from_csv(csv_path: str,
 
     except Exception as e:
         logger.error(f"Error in download_opinions_from_csv",
-                     exception=e, csv_path=csv_path)
+                     exception=e,
+                     csv_path=csv_path)
         raise
 
 
@@ -432,8 +448,8 @@ def download_all_opinions(metadata: List[Dict]):
             opinion_id = item.get('opinions')[0].get('id')
 
             if not opinion_id:
-                logger.warning(
-                    f"Skipping item {i}: no opinion ID found", item_index=i)
+                logger.warning(f"Skipping item {i}: no opinion ID found",
+                               item_index=i)
                 continue
 
             logger.info(
@@ -442,8 +458,8 @@ def download_all_opinions(metadata: List[Dict]):
             # Create opinion-specific directory
             opinion_dir = CURR_OPINIONS_DIR / f"opinion_{opinion_id}"
             opinion_dir.mkdir(parents=True, exist_ok=True)
-            logger.debug(
-                f"Opinion directory created: {opinion_dir}", opinion_id=opinion_id)
+            logger.debug(f"Opinion directory created: {opinion_dir}",
+                         opinion_id=opinion_id)
 
             try:
                 # Get full opinion data
@@ -455,7 +471,8 @@ def download_all_opinions(metadata: List[Dict]):
                     text = opinion_data['html_with_citations']
                     if text == "":
                         logger.warning(
-                            f"Empty 'html_with_citations' for opinion {opinion_id}", opinion_id=opinion_id)
+                            f"Empty 'html_with_citations' for opinion {opinion_id}",
+                            opinion_id=opinion_id)
                     else:
                         html_path = opinion_dir / f"opinion_{opinion_id}.html"
                         download_opinion_html(opinion_id, text, html_path)
@@ -468,33 +485,34 @@ def download_all_opinions(metadata: List[Dict]):
                     pdf_url = f"{BASE_PDF_URL}/{item.get('pdf_local_path')}"
                 elif item.get('pdf_harvard_path'):
                     # if there is no local pdf path, then check if the case was hosted on harvard's system
-                    logger.debug("no local pdf path found, but harvard pdf path found")
+                    logger.debug(
+                        "no local pdf path found, but harvard pdf path found")
                     pdf_url = f"{BASE_PDF_URL}/{item['pdf_harvard_path']}"
                 else:
                     logger.debug("no local or harvard pdf path found")
 
                 pdf_saved = False
                 if pdf_url != "":
-                    logger.debug(
-                        f"PDF URL: {pdf_url}", opinion_id=opinion_id)
+                    logger.debug(f"PDF URL: {pdf_url}", opinion_id=opinion_id)
                     pdf_path = opinion_dir / f"opinion_{opinion_id}.pdf"
                     if download_opinion_pdf(pdf_url, pdf_path):
                         pdf_saved = True
 
                 # Log success message based on what was saved
                 if html_saved and pdf_saved:
-                    logger.log_download_success(
-                        opinion_id, "HTML and PDF saved")
+                    logger.log_download_success(opinion_id,
+                                                "HTML and PDF saved")
                 elif html_saved:
                     if pdf_url == "":
                         logger.log_download_success(
                             opinion_id, "HTML saved (no PDF available)")
                     else:
-                        logger.log_download_success(
-                            opinion_id, "HTML saved (PDF failed)")
+                        logger.log_download_success(opinion_id,
+                                                    "HTML saved (PDF failed)")
                 else:
                     logger.warning(
-                        f"No HTML content available for opinion {opinion_id}", opinion_id=opinion_id)
+                        f"No HTML content available for opinion {opinion_id}",
+                        opinion_id=opinion_id)
 
                 time.sleep(REQUEST_DELAY)
 
@@ -502,18 +520,19 @@ def download_all_opinions(metadata: List[Dict]):
                 logger.log_download_failure(opinion_id, str(e), exception=e)
 
         except (KeyError, IndexError, TypeError) as e:
-            logger.error(
-                f"Error processing metadata item {i}", exception=e, item_index=i)
+            logger.error(f"Error processing metadata item {i}",
+                         exception=e,
+                         item_index=i)
         except Exception as e:
-            logger.error(
-                f"Unexpected error processing metadata item {i}", exception=e, item_index=i)
+            logger.error(f"Unexpected error processing metadata item {i}",
+                         exception=e,
+                         item_index=i)
 
 
 def save_complete_dataset(results: List[Dict],
                           download_opinions: bool = False) -> Dict[str, str]:
     """
-    Save complete dataset: cluster metadata, 
-    crosswalks, opinion metadata, docket metadata, and optionally download 
+    Save complete dataset: cluster metadata, crosswalks, opinion metadata, docket metadata, and optionally download 
     opinion text/PDFs
 
     Args:
@@ -526,9 +545,9 @@ def save_complete_dataset(results: List[Dict],
     logger = get_logger()
     saved_files = {}
 
-    logger.info("="*60)
+    logger.info("=" * 60)
     logger.info("SAVING METADATA")
-    logger.info("="*60)
+    logger.info("=" * 60)
 
     try:
         # 1. Save opinion cluster metadata (without nested opinion data)
@@ -536,7 +555,8 @@ def save_complete_dataset(results: List[Dict],
         logger.info("1. Extracting and saving opinion cluster metadata...")
         cluster_df = extract_cluster_metadata(results)
         cluster_csv_path = RUN_DIR / "cluster_metadata.csv"
-        cluster_df.to_csv(cluster_csv_path, index=False,
+        cluster_df.to_csv(cluster_csv_path,
+                          index=False,
                           quoting=csv.QUOTE_NONNUMERIC)
         saved_files['cluster_metadata_csv'] = str(cluster_csv_path)
         logger.info(
@@ -547,7 +567,8 @@ def save_complete_dataset(results: List[Dict],
         logger.info("2. Extracting and saving opinion metadata...")
         opinion_df = extract_opinion_metadata(results)
         opinion_csv_path = RUN_DIR / "opinion_metadata.csv"
-        opinion_df.to_csv(opinion_csv_path, index=False,
+        opinion_df.to_csv(opinion_csv_path,
+                          index=False,
                           quoting=csv.QUOTE_NONNUMERIC)
         saved_files['opinion_metadata_csv'] = str(opinion_csv_path)
         logger.info(
@@ -558,7 +579,8 @@ def save_complete_dataset(results: List[Dict],
         logger.info("3. Extracting and saving docket metadata...")
         docket_df = extract_docket_metadata(results)
         docket_csv_path = RUN_DIR / "docket_metadata.csv"
-        docket_df.to_csv(docket_csv_path, index=False,
+        docket_df.to_csv(docket_csv_path,
+                         index=False,
                          quoting=csv.QUOTE_NONNUMERIC)
         saved_files['docket_metadata_csv'] = str(docket_csv_path)
         logger.info(f"   Saved {len(docket_df)} dockets to: {docket_csv_path}")
@@ -600,9 +622,9 @@ def save_complete_dataset(results: List[Dict],
         logger.info("")
         logger.info("7. Skipping opinion downloads (download_opinions=False)")
 
-    logger.info("="*60)
+    logger.info("=" * 60)
     logger.info("DATASET SAVE COMPLETE")
-    logger.info("="*60)
+    logger.info("=" * 60)
 
     return saved_files
 
@@ -628,22 +650,21 @@ def extract_cluster_metadata(results: List[Dict]) -> pd.DataFrame:
                 continue
             if not isinstance(value, (dict, list)):
                 flat_item[key] = value
-                # TODO: debug why this doesn't seem to catch filepath_pdf_harvard fields? 
+                # TODO: debug why this doesn't seem to catch filepath_pdf_harvard fields?
 
         # Flatten list fields
         if 'citation' in item and isinstance(item['citation'], list):
             flat_item['citation'] = '; '.join(item['citation'])
-        if 'non_participating_judge_ids' in item and isinstance(item['non_participating_judge_ids'], list):
+        if 'non_participating_judge_ids' in item and isinstance(
+                item['non_participating_judge_ids'], list):
             flat_item['non_participating_judge_ids'] = '; '.join(
                 map(str, item['non_participating_judge_ids']))
         if 'panel_ids' in item and isinstance(item['panel_ids'], list):
-            flat_item['panel_ids'] = '; '.join(
-                map(str, item['panel_ids']))
+            flat_item['panel_ids'] = '; '.join(map(str, item['panel_ids']))
         if 'panel_names' in item and isinstance(item['panel_names'], list):
             flat_item['panel_names'] = '; '.join(item['panel_names'])
         if 'sibling_ids' in item and isinstance(item['sibling_ids'], list):
-            flat_item['sibling_ids'] = '; '.join(
-                map(str, item['sibling_ids']))
+            flat_item['sibling_ids'] = '; '.join(map(str, item['sibling_ids']))
 
         # Flatten the "meta" field
         if 'meta' in item and isinstance(item['meta'], dict):
@@ -791,8 +812,8 @@ def extract_docket_metadata(results: List[Dict]) -> pd.DataFrame:
                     flat_docket[key] = value
                 elif isinstance(value, list):
                     # Flatten lists to semicolon-separated strings
-                    flat_docket[key] = '; '.join(
-                        map(str, value)) if value else None
+                    flat_docket[key] = '; '.join(map(str,
+                                                     value)) if value else None
 
             # rename "id" to "docket_id" for clarity
             flat_docket['docket_id'] = flat_docket.pop('id', None)
@@ -801,8 +822,9 @@ def extract_docket_metadata(results: List[Dict]) -> pd.DataFrame:
             time.sleep(REQUEST_DELAY)
 
         except Exception as e:
-            logger.error(
-                f"Error fetching docket {docket_id}", exception=e, docket_id=docket_id)
+            logger.error(f"Error fetching docket {docket_id}",
+                         exception=e,
+                         docket_id=docket_id)
 
         if (i % 100) == 0:
             logger.info(f"Processed {i}/{len(docket_ids)} dockets...")
@@ -876,7 +898,6 @@ def extract_docket_metadata(results: List[Dict]) -> pd.DataFrame:
 
 #     df = pd.DataFrame(crosswalk_data)
 #     return df
-
 
 # def create_cluster_docket_crosswalk(results: List[Dict]) -> pd.DataFrame:
 #     """

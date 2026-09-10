@@ -2,14 +2,15 @@
 Main workflow to download CourtListener cases. 
 """
 
-# TODO: handle HTTP Error: 429 Client Error: Too Many Requests for url somewhere with a reattempt 
-# parse error message: eg {"detail":"Request was throttled. Expected available in 275 seconds."} 
-# also retry request for 502 errors 
+# TODO: handle HTTP Error: 429 Client Error: Too Many Requests for url somewhere with a reattempt
+# parse error message: eg {"detail":"Request was throttled. Expected available in 275 seconds."}
+# also retry request for 502 errors
 
 import sys
+import time
 from pathlib import Path
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 import pandas as pd
 
 # Add project root to Python path to allow imports from src.utils
@@ -17,23 +18,23 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.utils.logger import get_logger
-from src.utils.courtlistener_utils import save_complete_dataset, get_all_results
+from courtlistener_utils import save_complete_dataset, get_all_results
 from src.utils import config
 
 
 def search_and_download(query: str,
                         max_results: Optional[int] = None,
                         result_type: str = "o",
-                        court: Optional[str] = None,
+                        courts: Optional[List[str]] = None,
                         highlight: Optional[str] = None,
                         download_opinions: bool = False):
     """ Search cases, save metadata/crosswalks, and optionally download opinion documents.
 
         Args:
             query: Search query
-            max_results: Maximum number of results to fetch
+            max_results: Maximum number of results to fetch (applied per court)
             result_type: Type of search (see get_search_cases() function for options)
-            court: Optional court code filter (e.g., 'ca9', 'ca2')
+            courts: Optional list of court codes to filter
             highlight: Optional highlight parameter for search results
             download_opinions: Whether to download opinion files (both HTML and PDFs)
 
@@ -61,24 +62,36 @@ def search_and_download(query: str,
     logger.info(f"Run directory: {config.RUN_DIR}")
     logger.info(f"Query: {query}")
     logger.info(f"Max results: {max_results}")
-    if court:
-        logger.info(f"Court: {court}")
+    if courts:
+        logger.info(f"Courts: {courts}")
     logger.info(f"Download opinions: {download_opinions}")
+
+    if courts is None:
+        courts = [None]
 
     try:
         # Search and collect results
         logger.info("=" * 60)
         logger.info("Pulling opinion clusters from Search API...")
-        results = get_all_results(query=query,
-                                  max_results=max_results,
-                                  result_type=result_type,
-                                  highlight=highlight,
-                                  court=court)
 
-        logger.info(f"Found {len(results)} opinion clusters.")
+        results = []
+        # CourtListener's court filter has some bug in the logic (e.g. OR combinations) so we loop over each court individually
+        for c in courts:
+            court_results = get_all_results(query=query,
+                                            max_results=max_results,
+                                            result_type=result_type,
+                                            highlight=highlight,
+                                            court=c)
+            logger.info(
+                f"Found {len(court_results)} opinion clusters for court: {c}.")
+            results.extend(court_results)
+            if len(courts) > 1:
+                time.sleep(config.REQUEST_DELAY)
 
-        saved_files = save_complete_dataset(results,
-                                            download_opinions=download_opinions)
+        logger.info(f"Found {len(results)} opinion clusters total.")
+
+        saved_files = save_complete_dataset(
+            results, download_opinions=download_opinions)
 
         logger.info("All saved files:")
         for file_type, path in saved_files.items():
@@ -102,20 +115,20 @@ if __name__ == "__main__":
     try:
         config.setup_directories()
         logger = get_logger()
-        logger.info("="*60)
+        logger.info("=" * 60)
         logger.info("NEPA CourtListener Data Pull")
-        logger.info("="*60)
+        logger.info("=" * 60)
 
         saved_files = search_and_download(
             query="\"National Environmental Policy Act\"",
             result_type="o",
             highlight="on",
-            court="(ca1 OR ca2 OR ca3 OR ca4 OR ca5 OR ca6 OR ca7 OR ca8 OR ca9 OR ca10 OR ca11 OR cadc OR cafc OR scotus)",
-            # max_results=3229,
-            # max_results=5,
+            courts=[
+                "ca1", "ca2", "ca3", "ca4", "ca5", "ca6", "ca7", "ca8", "ca9",
+                "ca10", "ca11", "cadc", "cafc", "scotus"
+            ],
             max_results=None,
-            download_opinions=False
-        )
+            download_opinions=True)
 
         runtime = datetime.now() - script_start_time
         logger.info(f"Total script runtime: {runtime}")

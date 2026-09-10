@@ -29,7 +29,7 @@ from utils.config import (
     AG_VAL_ASSIGNMENTS_PATH,
     AG_TEST_ASSIGNMENTS_PATH,
     CL_TRAIN_ASSIGNMENTS_PATH,
-    COURTLISTENER_METADATA_DIR,
+    COURTLISTENER_RAW_DIR,
     LLM_OPINION_CLF_RAW_PATH,
     LLM_OPINION_CLF_PATH,
     LLM_JUDGES_CLF_RAW_PATH,
@@ -898,9 +898,9 @@ def merge_cluster_metadata_w_llm_features(
 def clean_courtlistener_clusters_main():
     # Find the most recent run directory
     # TODO: maybe move this to separate function or pass as parameter
-    run_dirs = sorted([d for d in COURTLISTENER_METADATA_DIR.iterdir() if d.is_dir() and d.name.startswith('run_')])
+    run_dirs = sorted([d for d in COURTLISTENER_RAW_DIR.iterdir() if d.is_dir() and d.name.startswith('run_')])
     if not run_dirs:
-        raise FileNotFoundError(f"No run directories found in {COURTLISTENER_METADATA_DIR}")
+        raise FileNotFoundError(f"No run directories found in {COURTLISTENER_RAW_DIR}")
 
     latest_run_dir = run_dirs[-1]
     print(f"Using run directory: {latest_run_dir.name}")
