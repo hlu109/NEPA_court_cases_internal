@@ -9,9 +9,9 @@
 #
 #SBATCH --mail-type=FAIL,END
 date
-cd "/nfs/roberts/project/pi_zdl3/shared/NEPA court case project/Code/NEPA_court_cases_external"
+cd "/nfs/roberts/project/pi_zdl3/shared/NEPA court case project/Code/NEPA_court_cases_internal"
 
 module load Python
 source venv/bin/activate
 
-python 01_data/01_download_courtlistener/main.py
+python src/01_data/01_download_courtlistener/main.py
