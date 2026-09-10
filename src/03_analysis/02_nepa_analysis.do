@@ -14,11 +14,11 @@ else if "$user" == "hl2266" {
     }
     else if strpos("`cwd'", "docker") {
         global dropbox "C:/Users/hl2266/YLS Dropbox/Hannah Lu/shared/NEPA Court Cases (Internal)"
-        global code_dir "C:/Users/hl2266/project_dockers/nepa/Code/NEPA_court_cases_external"
+        global code_dir "C:/Users/hl2266/project_dockers/nepa/Code/NEPA_court_cases_internal"
     }
     else if strpos("`cwd'", "pi_zdl3") {
         global dropbox "/nfs/roberts/project/pi_zdl3/hl2266/NEPA court case project"
-        global code_dir "${dropbox}/Code/NEPA_court_cases_external"
+        global code_dir "${dropbox}/Code/NEPA_court_cases_internal"
     }
     else {
         display as error "Hannah - error setting directories"
@@ -482,4 +482,43 @@ if $judgeIV_stage2 == 1 {
     save `circuit_year_spending'
 
     use `circuit_year_cases', clear
+    merge 1:1 court_id year using `circuit_year_spending' //, keep(master match) nogen
+    drop if year < 1970 | year > 1993 
+    drop if court_id == "cadc" | court_id == "cafc" | court_id == "scotus"
+    tab _merge
+    exit 
+    // check if there are any unmerged 
+
+    xtset court_id year
+    gen double spend_per_mile_t1 = F.spend_per_mile
+
+    gen double adverse_rulings_pc = n_adverse_rulings / population // per capita
+
+    * ---------------------------------------------------------------
+    * Basic regression: spend_per_mile_tr = alpha + b1*(adverse rulings pc)_tr + year FE + region FE
+    * ---------------------------------------------------------------
+    eststo ols_t:  reg spend_per_mile    adverse_rulings_pc i.year i.court_id
+    eststo ols_t1: reg spend_per_mile_t1 adverse_rulings_pc i.year i.court_id
+
+    * ---------------------------------------------------------------
+    * Judge IV second stage: instrument adverse rulings pc with random judge assignment
+    * ---------------------------------------------------------------
+    eststo iv_t:  ivregress 2sls spend_per_mile    (adverse_rulings_pc = judge_iv) i.year i.court_id, first
+    eststo iv_t1: ivregress 2sls spend_per_mile_t1 (adverse_rulings_pc = judge_iv) i.year i.court_id, first
+
+    esttab ols_t iv_t ols_t1 iv_t1 ///
+        using "${tabdir}/judgeIV_cost_regressions.tex", replace ///
+        booktabs label se star(* 0.10 ** 0.05 *** 0.01) ///
+        nomtitles ///
+        mgroups("Time t" "Time t+1", pattern(1 0 1 0) span) ///
+        indicate("Year FE = *.year" "Circuit FE = *.court_id") ///
+        scalars("N Observations" "r2 R-squared") ///
+        sfmt(%9.0fc %9.3f) ///
+        nonumber ///
+        nonotes addnotes("Standard errors in parentheses." ///
+            "Columns 2 and 4 instrument adverse rulings per capita with the random-judge-assignment strictness instrument." ///
+            "\sym{*} \(p<0.10\), \sym{**} \(p<0.05\), \sym{***} \(p<0.01\)")
+    copy_tab_to_overleaf "judgeIV_cost_regressions.tex"
+
+
 }

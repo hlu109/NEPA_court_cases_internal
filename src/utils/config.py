@@ -24,12 +24,12 @@ if _user == "hl2266":
         _DROPBOX_DIR = Path(
             "C:/Users/hl2266/YLS Dropbox/Hannah Lu/shared/NEPA Court Cases (Internal)/"
         )
-        CODE_DIR = BASE_DIR / "Code" / "NEPA_court_cases_external"
+        CODE_DIR = BASE_DIR / "Code" / "NEPA_court_cases_internal"
         DATA_ROOT_DIR = _DROPBOX_DIR / "Data"
     elif "pi_zdl3" in os.getcwd().lower():
         BASE_DIR = Path(
             "/nfs/roberts/project/pi_zdl3/hl2266/NEPA court case project")
-        CODE_DIR = BASE_DIR / "Code" / "NEPA_court_cases_external"
+        CODE_DIR = BASE_DIR / "Code" / "NEPA_court_cases_internal"
         DATA_ROOT_DIR = BASE_DIR / "Data"
     else:
         raise ValueError("Invalid location specified")

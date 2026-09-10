@@ -12,11 +12,11 @@ if "`user'" == "hl2266" {
     }
     else if strpos("`cwd'", "docker") {
         global dropbox "C:/Users/hl2266/YLS Dropbox/Hannah Lu/shared/NEPA Court Cases (Internal)"
-        global code_dir "C:/Users/hl2266/project_dockers/nepa/Code/NEPA_court_cases_external"
+        global code_dir "C:/Users/hl2266/project_dockers/nepa/Code/NEPA_court_cases_internal"
     }
     else if strpos("`cwd'", "pi_zdl3") {
         global dropbox "/nfs/roberts/project/pi_zdl3/hl2266/NEPA court case project"
-        global code_dir "${dropbox}/Code/NEPA_court_cases_external"
+        global code_dir "${dropbox}/Code/NEPA_court_cases_internal"
     }
     else {
         display as error "Could not auto-detect location for hl2266; set dropbox/code_dir manually"
