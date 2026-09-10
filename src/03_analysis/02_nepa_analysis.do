@@ -17,7 +17,7 @@ else if "$user" == "hl2266" {
         global code_dir "C:/Users/hl2266/project_dockers/nepa/Code/NEPA_court_cases_internal"
     }
     else if strpos("`cwd'", "pi_zdl3") {
-        global dropbox "/nfs/roberts/project/pi_zdl3/hl2266/NEPA court case project"
+        global dropbox "/nfs/roberts/project/pi_zdl3/shared/NEPA court case project"
         global code_dir "${dropbox}/Code/NEPA_court_cases_internal"
     }
     else {

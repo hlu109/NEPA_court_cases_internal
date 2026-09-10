@@ -28,7 +28,7 @@ if _user == "hl2266":
         DATA_ROOT_DIR = _DROPBOX_DIR / "Data"
     elif "pi_zdl3" in os.getcwd().lower():
         BASE_DIR = Path(
-            "/nfs/roberts/project/pi_zdl3/hl2266/NEPA court case project")
+            "/nfs/roberts/project/pi_zdl3/shared/NEPA court case project")
         CODE_DIR = BASE_DIR / "Code" / "NEPA_court_cases_internal"
         DATA_ROOT_DIR = BASE_DIR / "Data"
     else:
