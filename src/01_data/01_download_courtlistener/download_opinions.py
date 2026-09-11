@@ -57,6 +57,8 @@ def main(run_dir: str,
 if __name__ == "__main__":
     # Example usage
     main(
-        run_dir=str(config.RUN_DIR),  # TODO: update this
+        run_dir=str(
+            "C:/Users/hl2266/YLS Dropbox/Hannah Lu/shared/NEPA Court Cases (Internal)/Data/Raw/CourtListener/run_20260910_184612"
+        ),  # TODO: update this
         csv_name='opinion_metadata.csv',
         opinion_id_column='opinion_id')
