@@ -103,7 +103,7 @@ BASE_API_URL = "https://www.courtlistener.com/api/rest/v4"
 REQUEST_DELAY = 0.5  # seconds between requests (be nice to the API)
 TIMEOUT = 60  # seconds
 RETRY_WAIT_TIME = 5  # seconds to wait before retrying on retryable errors
-MAX_RETRIES = 3  # maximum number of retries for 502 and 429 errors
+MAX_RETRIES = 5  # maximum number of retries for 502 and 429 errors
 
 ################################################################################
 

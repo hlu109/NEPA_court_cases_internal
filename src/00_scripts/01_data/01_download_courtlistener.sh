@@ -3,8 +3,8 @@
 #SBATCH --job-name=download_courtlistener
 #SBATCH --output="/nfs/roberts/project/pi_zdl3/shared/NEPA court case project/slurm_logs/download_courtlistener_%j.log"
 #
-#SBATCH --time=23:59:00
-#SBATCH --mem=100G
+#SBATCH --time=5:00:00
+#SBATCH --mem=5G
 #SBATCH --ntasks=1
 #
 #SBATCH --mail-type=FAIL,END

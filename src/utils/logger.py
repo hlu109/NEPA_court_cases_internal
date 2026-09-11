@@ -15,6 +15,7 @@ sys.path.insert(0, str(project_root))
 
 from src.utils.config import RUN_DIR
 
+
 class LogLevel(Enum):
     """Log level enumeration"""
     DEBUG = logging.DEBUG
@@ -42,7 +43,7 @@ class Logger:
             log_dir: Directory to save log file 
             console_output: Whether to also output to console
             log_level: Minimum log level to record
-        """ 
+        """
         self.log_dir = log_dir
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self.log_path = log_dir / log_filename
@@ -59,8 +60,7 @@ class Logger:
         file_handler.setLevel(log_level.value)
         file_formatter = logging.Formatter(
             '%(asctime)s - %(levelname)s - %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
-        )
+            datefmt='%Y-%m-%d %H:%M:%S')
         file_handler.setFormatter(file_formatter)
         self.logger.addHandler(file_handler)
 
@@ -70,8 +70,7 @@ class Logger:
             console_handler.setLevel(log_level.value)
             console_formatter = logging.Formatter(
                 '%(asctime)s - %(levelname)s - %(message)s',
-                datefmt='%Y-%m-%d %H:%M:%S'
-            )
+                datefmt='%Y-%m-%d %H:%M:%S')
             console_handler.setFormatter(console_formatter)
             self.logger.addHandler(console_handler)
 
@@ -101,7 +100,10 @@ class Logger:
         self.stats['warnings'] += 1
         self.logger.warning(self._format_message(message, **kwargs))
 
-    def error(self, message: str, exception: Optional[Exception] = None, **kwargs):
+    def error(self,
+              message: str,
+              exception: Optional[Exception] = None,
+              **kwargs):
         """Log error message with optional exception details"""
         self.stats['errors'] += 1
 
@@ -117,7 +119,10 @@ class Logger:
 
         self.logger.error(error_msg)
 
-    def critical(self, message: str, exception: Optional[Exception] = None, **kwargs):
+    def critical(self,
+                 message: str,
+                 exception: Optional[Exception] = None,
+                 **kwargs):
         """Log critical error message"""
         self.stats['errors'] += 1
         error_msg = self._format_message(message, **kwargs)
@@ -147,7 +152,10 @@ class Logger:
             msg += f" - {message}"
         self.info(msg, opinion_id=opinion_id)
 
-    def log_download_failure(self, opinion_id: int, error: str, exception: Optional[Exception] = None):
+    def log_download_failure(self,
+                             opinion_id: int,
+                             error: str,
+                             exception: Optional[Exception] = None):
         """Log failed download"""
         self.stats['downloads_failed'] += 1
         msg = f"Download FAILED: Opinion {opinion_id} - {error}"
@@ -160,32 +168,47 @@ class Logger:
             self.stats['api_errors'] += 1
         self.debug(f"API Request: {endpoint} | Status: {status}")
 
-    def log_api_error(self, endpoint: str, error: str, exception: Optional[Exception] = None):
+    def log_api_error(self,
+                      endpoint: str,
+                      error: str,
+                      exception: Optional[Exception] = None):
         """Log API error"""
         self.stats['api_errors'] += 1
         msg = f"API Error: {endpoint} - {error}"
         self.error(msg, exception=exception, endpoint=endpoint)
 
     def print_summary(self):
-        """Print summary of logged activity"""
-        print("\n" + "="*60)
-        print("ACTIVITY SUMMARY")
-        print("="*60)
-        print(f"Info messages: {self.stats['info']}")
-        print(f"Warnings: {self.stats['warnings']}")
-        print(f"Errors: {self.stats['errors']}")
-        print(f"Downloads successful: {self.stats['downloads_successful']}")
-        print(f"Downloads failed: {self.stats['downloads_failed']}")
-        print(f"API requests: {self.stats['api_requests']}")
-        print(f"API errors: {self.stats['api_errors']}")
-        print(f"Log saved to: {self.log_path}")
+        """Print summary of logged activity and append it to the log file"""
+        lines = [
+            "=" * 60,
+            "ACTIVITY SUMMARY",
+            "=" * 60,
+            f"Info messages: {self.stats['info']}",
+            f"Warnings: {self.stats['warnings']}",
+            f"Errors: {self.stats['errors']}",
+            f"Downloads successful: {self.stats['downloads_successful']}",
+            f"Downloads failed: {self.stats['downloads_failed']}",
+            f"API requests: {self.stats['api_requests']}",
+            f"API errors: {self.stats['api_errors']}",
+            f"Log saved to: {self.log_path}",
+        ]
 
         if self.error_details:
-            print(f"\nFirst 5 errors:")
+            lines.append("")
+            lines.append("First 5 errors:")
             for i, error in enumerate(self.error_details[:5], 1):
-                print(f"  {i}. {error['message']}")
-                print(f"     Exception: {error['exception_type']}: {error['exception_msg']}")
-        print("="*60 + "\n")
+                lines.append(f"  {i}. {error['message']}")
+                lines.append(
+                    f"     Exception: {error['exception_type']}: {error['exception_msg']}"
+                )
+        lines.append("=" * 60)
+
+        summary = "\n" + "\n".join(lines) + "\n"
+        print(summary)
+
+        # also write the summary to the log file
+        with open(self.log_path, "a", encoding="utf-8") as f:
+            f.write(summary)
 
     def get_stats(self) -> Dict[str, Any]:
         """Get current statistics"""
