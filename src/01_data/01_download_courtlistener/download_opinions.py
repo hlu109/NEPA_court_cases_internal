@@ -1,6 +1,5 @@
 """
-This script downloads opinion HTML/PDFs based on a CSV file
-containing opinion IDs. It will skip opinions that have already been downloaded. The script auto-finds the CSV file in the specified run directory.
+Download opinion HTML/PDFs for an existing CourtListener metadata run directory, from its saved CSV of opinion IDs.
 """
 
 import sys
@@ -11,7 +10,7 @@ from datetime import datetime
 project_root = Path(__file__).parents[3]
 sys.path.insert(0, str(project_root))
 
-from src.utils import config
+from src.utils.logger import Logger, set_logger
 from courtlistener_utils import download_opinions_from_csv
 
 
@@ -30,9 +29,10 @@ def main(run_dir: str,
     """
     script_start_time = datetime.now()
 
-    config.setup_directories()
-
+    # log into the run directory being backfilled, not a fresh timestamped one
     run_dir = Path(run_dir)
+    set_logger(Logger(log_dir=run_dir))
+
     csv_path = run_dir / csv_name
     if not csv_path.exists():
         raise FileNotFoundError(

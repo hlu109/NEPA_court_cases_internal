@@ -254,7 +254,7 @@ def download_opinion_pdf(download_url: str, save_path: str) -> bool:
 
         with open(save_path, 'wb') as f:
             f.write(response.content)
-        logger.info(f"PDF saved to {save_path}")
+        logger.debug(f"PDF saved to {save_path}")
         return True
 
     except requests.exceptions.HTTPError as e:
@@ -305,13 +305,59 @@ def download_opinion_html(opinion_id: int, text: str, save_path) -> str:
         raise
 
 
-# TODO: refactor this function and download_all_opinions since lots of duplicate code
+def _download_pdf_with_fallback(opinion_id: int, opinion_data: Dict,
+                                opinion_dir: Path) -> tuple:
+    """
+    Attempts PDF download with multiple sources and fallbacks.
+
+    Args:
+        opinion_id: Opinion ID number
+        opinion_data: Full opinion dictionary from CourtListener API call
+        opinion_dir: Directory to save the PDF into.
+
+    Returns:
+        A tuple (pdf_saved, pdf_url, pdf_source): whether a PDF was saved, and the URL/source ("local_path", "download_url", or "harvard").
+    """
+    logger = get_logger()
+    pdf_path = opinion_dir / f"opinion_{opinion_id}.pdf"
+
+    candidates = []
+    if opinion_data.get('local_path'):
+        candidates.append(
+            ('local_path', f"{BASE_PDF_URL}/{opinion_data['local_path']}"))
+    if opinion_data.get('download_url'):
+        candidates.append(('download_url', opinion_data['download_url']))
+
+    for i, (source, url) in enumerate(candidates, start=1):
+        logger.debug(f"\t\tPDF attempt {i}: trying '{source}' url: {url}",
+                     opinion_id=opinion_id)
+        if download_opinion_pdf(url, pdf_path):
+            return True, url, source
+        time.sleep(REQUEST_DELAY)
+
+    # last resort fallback - harvard server pdf which is sometimes populated in the cluster record
+    cluster_id = opinion_data.get('cluster_id')
+    cluster_data = get_cluster_by_id(cluster_id) if cluster_id else {}
+    harvard_path = cluster_data.get('filepath_pdf_harvard')
+    if harvard_path:
+        url = f"{BASE_PDF_URL}/{harvard_path}"
+        logger.debug(
+            f"\t\tPDF attempt {len(candidates) + 1}: trying 'harvard' url: {url}",
+            opinion_id=opinion_id)
+        if download_opinion_pdf(url, pdf_path):
+            return True, url, 'harvard'
+
+    return False, None, None
+
+
 def download_opinions_from_csv(csv_path: str,
                                output_dir: Path,
                                opinion_id_column: str = 'opinion_id',
                                existing_downloads_dir: Optional[Path] = None):
     """
-    Download opinions from a CSV file, skipping already-downloaded ones
+    Download opinions from a CSV file, skipping already-downloaded ones.
+
+    Exports a summary CSV of download status.
 
     Args:
         csv_path: Path to CSV file containing opinion IDs
@@ -322,7 +368,6 @@ def download_opinions_from_csv(csv_path: str,
     logger = get_logger()
 
     try:
-        # Read CSV
         df = pd.read_csv(csv_path)
         logger.info(f"Reading CSV file: {csv_path}")
 
@@ -338,195 +383,113 @@ def download_opinions_from_csv(csv_path: str,
         output_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"Output directory: {output_dir}")
 
-        # Check for existing downloads
-        already_downloaded = set()
-        if existing_downloads_dir and existing_downloads_dir.exists():
+        if existing_downloads_dir:
             logger.info(
                 f"Checking for existing downloads in: {existing_downloads_dir}"
             )
-            for opinion_dir in existing_downloads_dir.glob("opinion_*"):
-                try:
-                    opinion_id = int(opinion_dir.name.split("_")[1])
-                    already_downloaded.add(opinion_id)
-                except (ValueError, IndexError) as e:
-                    logger.warning(
-                        f"Could not parse opinion ID from directory: {opinion_dir.name}",
-                        exception=e)
-                    continue
-            logger.info(
-                f"Found {len(already_downloaded)} already downloaded opinions")
 
-        # Filter to only new downloads
-        opinions_to_download = [
-            oid for oid in opinion_ids if oid not in already_downloaded
-        ]
-        logger.info(f"Will download {len(opinions_to_download)} new opinions")
+        summary_rows = []
+        skipped_count = 0
 
-        for i, opinion_id in enumerate(opinions_to_download, 1):
-            logger.info(
-                f"[{i}/{len(opinions_to_download)}] Downloading opinion {opinion_id}..."
-            )
-
-            # Create opinion-specific directory
+        for i, opinion_id in enumerate(opinion_ids, start=1):
+            logger.info(f"[{i}/{len(opinion_ids)}] On opinion {opinion_id} ")
             opinion_dir = output_dir / f"opinion_{opinion_id}"
+            html_path = opinion_dir / f"opinion_{opinion_id}.html"
+
+            # check for existing files
+            if existing_downloads_dir:
+                existing_opinion_dir = existing_downloads_dir / f"opinion_{opinion_id}"
+                have_html = (existing_opinion_dir /
+                             f"opinion_{opinion_id}.html").exists()
+                have_pdf = (existing_opinion_dir /
+                            f"opinion_{opinion_id}.pdf").exists()
+            else:
+                have_html = False
+                have_pdf = False
+
+            if have_html and have_pdf:
+                # skip downloads
+                skipped_count += 1
+
+            need_html = not have_html
+            need_pdf = not have_pdf
+
+            logger.info(
+                f"html={'needed' if need_html else 'skip'}, pdf={'needed' if need_pdf else 'skip'}..."
+            )
             opinion_dir.mkdir(parents=True, exist_ok=True)
 
-            try:
-                # Get full opinion data
-                opinion_data = get_opinion_by_id(opinion_id)
+            html_downloaded = not need_html
+            pdf_downloaded = not need_pdf
+            pdf_url = None
+            pdf_source = None
 
-                # Save HTML text
-                html_saved = False
-                if opinion_data.get('html_with_citations'):
-                    text = opinion_data['html_with_citations']
-                    if text == "":
-                        logger.warning(
-                            f"Empty 'html_with_citations' for opinion {opinion_id}",
-                            opinion_id=opinion_id)
-                    else:
-                        html_path = opinion_dir / f"opinion_{opinion_id}.html"
-                        download_opinion_html(opinion_id, text, html_path)
-                        html_saved = True
+            if need_html or need_pdf:
+                try:
+                    # Get full opinion data
+                    opinion_data = get_opinion_by_id(opinion_id)
 
-                # Save PDF
-                pdf_url = None
-                if opinion_data.get('local_path'):
-                    pdf_url = f"{BASE_PDF_URL}/{opinion_data['local_path']}"
-                elif opinion_data.get('download_url'):
-                    pdf_url = opinion_data['download_url']
+                    # Save HTML text
+                    if need_html and opinion_data.get('html_with_citations'):
+                        text = opinion_data['html_with_citations']
+                        if text == "":
+                            logger.warning(
+                                f"Empty 'html_with_citations' for opinion {opinion_id}",
+                                opinion_id=opinion_id)
+                        else:
+                            download_opinion_html(opinion_id, text, html_path)
+                            html_downloaded = True
 
-                pdf_saved = False
-                if pdf_url:
-                    pdf_path = opinion_dir / f"opinion_{opinion_id}.pdf"
-                    if download_opinion_pdf(pdf_url, pdf_path):
-                        pdf_saved = True
+                        if html_downloaded:
+                            logger.log_download_success(
+                                opinion_id, "HTML saved")
+                        else:
+                            logger.log_download_failure(
+                                opinion_id, "No HTML content downloaded")
 
-                # Log success message based on what was saved
-                if html_saved and pdf_saved:
-                    logger.log_download_success(opinion_id,
-                                                "HTML and PDF saved")
-                elif html_saved:
-                    if pdf_url is None:
-                        logger.log_download_success(
-                            opinion_id, "HTML saved (no PDF available)")
-                    else:
-                        logger.log_download_success(opinion_id,
-                                                    "HTML saved (PDF failed)")
-                else:
-                    logger.warning(
-                        f"No HTML content available for opinion {opinion_id}",
-                        opinion_id=opinion_id)
+                    # Save PDF
+                    if need_pdf:
+                        pdf_downloaded, pdf_url, pdf_source = _download_pdf_with_fallback(
+                            opinion_id, opinion_data, opinion_dir)
 
-                time.sleep(REQUEST_DELAY)
+                        if pdf_downloaded:
+                            logger.log_download_success(
+                                opinion_id,
+                                f"PDF saved (source: {pdf_source})")
+                        else:
+                            logger.log_download_failure(
+                                opinion_id, "No PDF content downloaded")
 
-            except Exception as e:
-                logger.log_download_failure(opinion_id, str(e), exception=e)
+                    time.sleep(REQUEST_DELAY)
 
+                except Exception as e:
+                    logger.log_download_failure(opinion_id,
+                                                str(e),
+                                                exception=e)
+
+            summary_rows.append({
+                'opinion_id': opinion_id,
+                'html_downloaded': html_downloaded,
+                'pdf_downloaded': pdf_downloaded,
+                'pdf_url': pdf_url or '',
+                'pdf_source': pdf_source or '',
+            })
+
+        logger.info(
+            f"Skipped {skipped_count} opinions with both HTML and PDF already downloaded"
+        )
         logger.info(f"Downloads saved to: {output_dir}")
+
+        # write fresh download summary next to the input CSV
+        summary_path = Path(csv_path).parent / "opinion_download_summary.csv"
+        pd.DataFrame(summary_rows).to_csv(summary_path, index=False)
+        logger.info(f"Saved download summary to: {summary_path}")
 
     except Exception as e:
         logger.error(f"Error in download_opinions_from_csv",
                      exception=e,
                      csv_path=csv_path)
         raise
-
-
-def download_all_opinions(metadata: List[Dict]):
-    """
-    Download HTML and PDFs for all opinions in metadata
-
-    Args:
-        metadata: List of opinion cluster objects # TODO: fix this to list of opinion objects
-    """
-    logger = get_logger()
-
-    logger.info(f"Starting download of {len(metadata)} opinions...")
-    logger.info(f"Saving to: {CURR_OPINIONS_DIR}")
-
-    for i, item in enumerate(metadata, 1):
-        try:
-            opinion_id = item.get('opinions')[0].get('id')
-
-            if not opinion_id:
-                logger.warning(f"Skipping item {i}: no opinion ID found",
-                               item_index=i)
-                continue
-
-            logger.info(
-                f"[{i}/{len(metadata)}] Downloading opinion {opinion_id}...")
-
-            # Create opinion-specific directory
-            opinion_dir = CURR_OPINIONS_DIR / f"opinion_{opinion_id}"
-            opinion_dir.mkdir(parents=True, exist_ok=True)
-            logger.debug(f"Opinion directory created: {opinion_dir}",
-                         opinion_id=opinion_id)
-
-            try:
-                # Get full opinion data
-                opinion_data = get_opinion_by_id(opinion_id)
-
-                # Save HTML text (via HTML with citations field, which is recommended over plain text)
-                html_saved = False
-                if opinion_data.get('html_with_citations'):
-                    text = opinion_data['html_with_citations']
-                    if text == "":
-                        logger.warning(
-                            f"Empty 'html_with_citations' for opinion {opinion_id}",
-                            opinion_id=opinion_id)
-                    else:
-                        html_path = opinion_dir / f"opinion_{opinion_id}.html"
-                        download_opinion_html(opinion_id, text, html_path)
-                        html_saved = True
-
-                # Save PDF
-                pdf_url = ""
-                if item.get('pdf_local_path'):
-                    logger.debug("local pdf path found")
-                    pdf_url = f"{BASE_PDF_URL}/{item.get('pdf_local_path')}"
-                elif item.get('pdf_harvard_path'):
-                    # if there is no local pdf path, then check if the case was hosted on harvard's system
-                    logger.debug(
-                        "no local pdf path found, but harvard pdf path found")
-                    pdf_url = f"{BASE_PDF_URL}/{item['pdf_harvard_path']}"
-                else:
-                    logger.debug("no local or harvard pdf path found")
-
-                pdf_saved = False
-                if pdf_url != "":
-                    logger.debug(f"PDF URL: {pdf_url}", opinion_id=opinion_id)
-                    pdf_path = opinion_dir / f"opinion_{opinion_id}.pdf"
-                    if download_opinion_pdf(pdf_url, pdf_path):
-                        pdf_saved = True
-
-                # Log success message based on what was saved
-                if html_saved and pdf_saved:
-                    logger.log_download_success(opinion_id,
-                                                "HTML and PDF saved")
-                elif html_saved:
-                    if pdf_url == "":
-                        logger.log_download_success(
-                            opinion_id, "HTML saved (no PDF available)")
-                    else:
-                        logger.log_download_success(opinion_id,
-                                                    "HTML saved (PDF failed)")
-                else:
-                    logger.warning(
-                        f"No HTML content available for opinion {opinion_id}",
-                        opinion_id=opinion_id)
-
-                time.sleep(REQUEST_DELAY)
-
-            except Exception as e:
-                logger.log_download_failure(opinion_id, str(e), exception=e)
-
-        except (KeyError, IndexError, TypeError) as e:
-            logger.error(f"Error processing metadata item {i}",
-                         exception=e,
-                         item_index=i)
-        except Exception as e:
-            logger.error(f"Unexpected error processing metadata item {i}",
-                         exception=e,
-                         item_index=i)
 
 
 def save_complete_dataset(results: List[Dict],
@@ -615,7 +578,10 @@ def save_complete_dataset(results: List[Dict],
     if download_opinions:
         logger.info("")
         logger.info("7. Downloading opinion text/PDFs...")
-        download_all_opinions(results)
+        download_opinions_from_csv(csv_path=opinion_csv_path,
+                                   output_dir=CURR_OPINIONS_DIR,
+                                   opinion_id_column='opinion_id',
+                                   existing_downloads_dir=CURR_OPINIONS_DIR)
         saved_files['log'] = str(logger.log_path)
         saved_files['run_dir'] = str(CURR_OPINIONS_DIR)
     else:
