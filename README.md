@@ -40,3 +40,12 @@ The project uses a separate data directory (outside the code repository) with th
 - Configure paths in `src/utils/config.py` to match local setup.
 - To run code in `01_data/` and `02_coding_cases/`, you'll need a personal API key for CourtListener and Google Cloud/Google Gemini respectively. The API key should be stored in `secret/COURTLISTENER_API_KEY.txt` and `secret/GEMINI_API_KEY.txt`. They are omitted from git version control as they should be treated like passcodes. 
 
+
+
+## Gemini 
+PLACEHOLDER 
+* insert instructions on API keys. 
+
+
+### Gemini Running Logistics
+For the judge-only extraction, Gemini took around 7 hours and cost ~$24 for a roughly 1k sample using the 2.5 flash model. After fixing the sample (now ~3x) and merging the outcome coding together with the judge name extraction, I'm estimating a cost of $75-150 and a runtime of 21-42 hours. 
