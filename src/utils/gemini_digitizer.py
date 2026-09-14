@@ -291,6 +291,7 @@ def process_cases(genai_client,
     # track issues in real time
     error_count = 0
     missing_file_skip_count = 0
+    processed_count = 0
 
     try:
         for i, case_id in enumerate(case_ids):
@@ -331,6 +332,7 @@ def process_cases(genai_client,
 
             file_source_indicator = "+".join(
                 os.path.splitext(p)[1].lstrip(".") for p in case_opinion_paths)
+            processed_count += 1
 
             retries = 0
             success = False
@@ -472,7 +474,7 @@ def process_cases(genai_client,
                 all_dataframes.append(df)
 
             total_time_elapsed = time.time() - start_time
-            avg_time_per_case = total_time_elapsed / (i + 1)
+            avg_time_per_case = total_time_elapsed / processed_count if processed_count else 0
             # print(f"Total time elapsed: {total_time_elapsed / 3600:.2f} hrs")
             # print(f"Average time per case so far: {avg_time_per_case:.2f} s")
             # print(f"Cases with no Gemini output so far: {error_count}")
