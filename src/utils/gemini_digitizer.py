@@ -12,6 +12,10 @@ class RateLimitException(Exception):
     """Raised when 429 retries are exhausted to abort full run."""
 
 
+class ClientNonRetryableException(Exception):
+    """Raised when the model rejects a request with a non-retryable client error."""
+
+
 def upload_to_API(genai_client, file_path: str, log_dir=None, identifier=None):
     """
     Uploads court case opinion file to the Gemini API.
@@ -210,11 +214,12 @@ def extract_case_data(genai_client,
                     log_dir, identifier)
                 time.sleep(wait_time)
             else:
+                # in general, Gemini documentation says not to retry on client errors like 400 or 403 as they indicate issues like invalid API keys or bad syntax
                 m = f"Client error {e.code} occurred (non-retryable): {e}"
                 _log_and_print(
                     f"case_id={case_id} \t\nmodel_id={model_id} \t\nextract_attempt={attempt + 1} \t\n{m}",
                     log_dir, identifier)
-                return None
+                raise ClientNonRetryableException(str(e))
         except Exception as e:
             m = f"Other exception occurred (non-retryable): {e}"
             _log_and_print(
@@ -399,10 +404,27 @@ def process_cases(genai_client,
                                 )
 
                     else:
-                        m = f"FAILURE - No data found for case {case_id}."
+                        m = f"FAILURE - No results retrieved for case {case_id}."
                         _log_and_print(
                             f"case_id={case_id} \t\nfile_source_indicator={file_source_indicator} \t\nmodel_id={model_id} \t\n{m}",
                             log_dir, identifier)
+                        retries += 1
+                        if retries < max_retries:
+                            m = f"Retrying opinion {case_id} in 5 seconds..."
+                            _log_and_print(
+                                f"case_id={case_id} \t\ncase_attempt={retries + 1} \t\n{m}",
+                                log_dir, identifier)
+                            time.sleep(5)
+                        else:
+                            _log_and_print(
+                                f"Max retries reached for case {case_id}. Giving up.",
+                                log_dir, identifier)
+
+                except ClientNonRetryableException as e:
+                    _log_and_print(
+                        f"case_id={case_id} \t\nfile_source_indicator={file_source_indicator} \t\nGiving up immediately: {e}",
+                        log_dir, identifier)
+                    break
 
                 except requests.exceptions.ConnectionError as e:
                     m = f"Connection error for opinion {case_id}: {e}"
@@ -423,6 +445,23 @@ def process_cases(genai_client,
                         print(
                             f"Warning: Max retries reached for case {case_id}."
                         )
+
+                except Exception as e:
+                    m = f"Unexpected error: {e}"
+                    _log_and_print(
+                        f"case_id={case_id} \t\ncase_attempt={retries + 1} \t\nfile_source_indicator={file_source_indicator} \t\n{m}",
+                        log_dir, identifier)
+                    retries += 1
+                    if retries < max_retries:
+                        m = f"Retrying opinion {case_id} in 5 seconds..."
+                        _log_and_print(
+                            f"case_id={case_id} \t\ncase_attempt={retries + 1} \t\n{m}",
+                            log_dir, identifier)
+                        time.sleep(5)
+                    else:
+                        _log_and_print(
+                            f"Max retries reached for case {case_id}. Giving up.",
+                            log_dir, identifier)
 
             if not success:
                 error_count += 1

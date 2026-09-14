@@ -321,12 +321,14 @@ def _download_pdf_with_fallback(opinion_id: int, opinion_data: Dict,
     logger = get_logger()
     pdf_path = opinion_dir / f"opinion_{opinion_id}.pdf"
 
+    local_path = opinion_data.get('local_path')
+    download_url = opinion_data.get('download_url')
+
     candidates = []
-    if opinion_data.get('local_path'):
-        candidates.append(
-            ('local_path', f"{BASE_PDF_URL}/{opinion_data['local_path']}"))
-    if opinion_data.get('download_url'):
-        candidates.append(('download_url', opinion_data['download_url']))
+    if local_path and local_path.lower().endswith('.pdf'):
+        candidates.append(('local_path', f"{BASE_PDF_URL}/{local_path}"))
+    if download_url and download_url.lower().endswith('.pdf'):
+        candidates.append(('download_url', download_url))
 
     for i, (source, url) in enumerate(candidates, start=1):
         logger.debug(f"\t\tPDF attempt {i}: trying '{source}' url: {url}",
@@ -339,7 +341,7 @@ def _download_pdf_with_fallback(opinion_id: int, opinion_data: Dict,
     cluster_id = opinion_data.get('cluster_id')
     cluster_data = get_cluster_by_id(cluster_id) if cluster_id else {}
     harvard_path = cluster_data.get('filepath_pdf_harvard')
-    if harvard_path:
+    if harvard_path and harvard_path.lower().endswith('.pdf'):
         url = f"{BASE_PDF_URL}/{harvard_path}"
         logger.debug(
             f"\t\tPDF attempt {len(candidates) + 1}: trying 'harvard' url: {url}",
