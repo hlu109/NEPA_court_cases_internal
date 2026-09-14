@@ -3,6 +3,7 @@
 # ------------------------------------------------------------------------------
 from google import genai
 import os
+import signal
 import sys
 from pathlib import Path
 
@@ -16,6 +17,14 @@ from utils.gemini_digitizer import process_cases, RateLimitException
 from utils.gemini_logging import write_log, log_config, write_run_boundary
 
 # Note: API requires an API key, saved in secret/GEMINI_API_KEY.txt
+
+
+def _sigterm_to_keyboard_interrupt(signum, frame):
+    """Raises KeyboardInterrupt so a SIGTERM (sent by slurm scancel) is handled by the same interrupt logic as Ctrl+C."""
+    raise KeyboardInterrupt()
+
+
+signal.signal(signal.SIGTERM, _sigterm_to_keyboard_interrupt)
 
 
 def main():
