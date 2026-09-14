@@ -4,21 +4,23 @@ import requests
 import os
 import json
 import pandas as pd
+from google.genai import errors
 from utils.gemini_logging import _log_and_print
 
 
-def upload_to_API(genai_client,
-                  file_path: str,
-                  log_dir=None,
-                  identifier=None):
+class RateLimitException(Exception):
+    """Raised when 429 retries are exhausted to abort full run."""
+
+
+def upload_to_API(genai_client, file_path: str, log_dir=None, identifier=None):
     """
     Uploads court case opinion file to the Gemini API.
 
     Parameters:
         genai_client: Gemini API client.
         file_path (str): Path to the input opinion file.
-        log_dir (str, optional): Directory for writing Gemini error logs.
-        identifier (str, optional): Run identifier used for the Gemini log filename.
+        log_dir (str): Directory for writing Gemini error logs.
+        identifier (str): Run identifier used for the Gemini log filename.
 
     Returns:
         object: Uploaded file object from the Gemini API.
@@ -31,7 +33,7 @@ def upload_to_API(genai_client,
     base_wait = 10
     should_check_existing = True
 
-    # Error handling: for 503 errors (server side), retry with expotential backoff/wait time. 
+    # Error handling: retry server errors (5xx) and rate limits (429) with exponential backoff.
     # For all other errors, in order to keep things running, we bypass the check for existing files and upload directly.
     for attempt in range(max_retries):
         if not should_check_existing:
@@ -46,19 +48,28 @@ def upload_to_API(genai_client,
                     )
                     break
             break
-        except Exception as e:
-            if '503' in str(e):
-                wait_time = base_wait * (2**attempt)
-                m = f"Error 503 while checking existing upload for '{file_name}' on attempt {attempt + 1}. Retrying in {wait_time:.1f}s..."
+        except errors.ServerError as e:
+            wait_time = base_wait * (2**attempt)
+            m = f"Server error {e.code} while checking existing upload for '{file_name}' on attempt {attempt + 1}. Retrying in {wait_time:.1f}s..."
+            _log_and_print(m, log_dir, identifier)
+            time.sleep(wait_time)
+        except errors.ClientError as e:
+            if e.code == 429:
+                wait_time = 60 * (2**attempt)
+                m = f"Rate limit (429 error) while checking existing upload for '{file_name}' on attempt {attempt + 1}. Retrying in {wait_time:.1f}s..."
                 _log_and_print(m, log_dir, identifier)
                 time.sleep(wait_time)
             else:
-                m = f"Warning: existing file check failed for '{file_name}'. Skipping check and proceeding with direct upload: {e}"
+                m = f"Warning: existing file check failed for '{file_name}' (client error {e.code}). Skipping check and proceeding with direct upload: {e}"
                 _log_and_print(m, log_dir, identifier)
                 should_check_existing = False
+        except Exception as e:
+            m = f"Warning: existing file check failed for '{file_name}'. Skipping check and proceeding with direct upload: {e}"
+            _log_and_print(m, log_dir, identifier)
+            should_check_existing = False
 
     if should_check_existing and not uploaded_file and attempt == max_retries - 1:
-        m = f"Max 503 retries reached while checking existing upload for '{file_name}'. Proceeding with direct upload."
+        m = f"Max retries reached while checking existing upload for '{file_name}'. Proceeding with direct upload."
         _log_and_print(m, log_dir, identifier)
 
     # Upload file (only if it has not already been uploaded)
@@ -70,9 +81,36 @@ def upload_to_API(genai_client,
     return uploaded_file
 
 
+def _save_partial_results(all_dataframes, outfile_path, log_dir, identifier,
+                          reason):
+    """
+    Saves accumulated rows to CSV and returns the concatenated DataFrame.
+
+    Parameters:
+        all_dataframes (list): List of one-row DataFrames to concatenate and save.
+        outfile_path (str): Output CSV path.
+        log_dir (str): Logging directory.
+        identifier (str): Run identifier.
+        reason (str): Reason why the partial save was triggered.
+
+    Returns:
+        Concatenated DataFrame, or None.
+    """
+    if not all_dataframes:
+        _log_and_print(f"{reason}: no partial results to save.", log_dir,
+                       identifier)
+        return None
+    partial_df = pd.concat(all_dataframes, ignore_index=True)
+    partial_df.to_csv(outfile_path, index=False)
+    _log_and_print(
+        f"{reason}: partial results saved to {outfile_path} ({partial_df.shape[0]} rows).",
+        log_dir, identifier)
+    return partial_df
+
+
 def extract_case_data(genai_client,
-                      input_file,
-                      data_struct: BaseModel,
+                      input_files: list,
+                      data_struct: type[BaseModel],
                       prompt_text: str,
                       model_id: str,
                       case_id=None,
@@ -80,17 +118,17 @@ def extract_case_data(genai_client,
                       identifier=None,
                       debug=False):
     """
-    Extracts structured data from a court case opinion file using the Gemini API.
+    Extracts structured data from one or more court case opinion files using the Gemini API.
 
     Parameters:
         genai_client: Gemini API client.
-        input_file: File object uploaded to the Gemini API.
+        input_files (list): File objects uploaded to the Gemini API.
         data_struct (BaseModel): Data structure for extracted content.
         prompt_text (str): Prompt text for the API.
         model_id (str): Gemini model ID.
-        case_id (str, optional): Opinion/case identifier used in error logging context.
-        log_dir (str, optional): Directory for writing Gemini error logs.
-        identifier (str, optional): Run identifier used for the Gemini log filename.
+        case_id (str): Opinion/case identifier used in error logging context.
+        log_dir (str): Directory for writing Gemini error logs.
+        identifier (str): Run identifier used for the Gemini log filename.
         debug (bool): Enables debug logging.
 
     Returns:
@@ -107,7 +145,7 @@ def extract_case_data(genai_client,
             # Generate a structured response using the Gemini API ---
             response = genai_client.models.generate_content(
                 model=model_id,
-                contents=[prompt_text, input_file],
+                contents=[prompt_text, *input_files],
                 config={
                     'response_mime_type': 'application/json',
                     'response_schema': data_struct,
@@ -146,43 +184,68 @@ def extract_case_data(genai_client,
 
             return response.parsed
 
-        # Add in a wait time response if the model is temporarily unavailable (error 503)
-        # TODO: add wait time to handle rate limit errors
-        except Exception as e:
-            if '503' in str(e):
-                wait_time = base_wait * (2**attempt)
-                m = f"Error 503 on attempt {attempt + 1}. Retrying in {wait_time:.1f}s..."
+        # retry server errors with exponential backoff; retry 429s with a longer wait and kill the run if they persist
+        except errors.ServerError as e:
+            wait_time = base_wait * (2**attempt)
+            m = f"Server error {e.code} on attempt {attempt + 1}. Retrying in {wait_time:.1f}s..."
+            _log_and_print(
+                f"case_id={case_id} \t\nmodel_id={model_id} \t\nextract_attempt={attempt + 1} \t\n{m}",
+                log_dir, identifier)
+            time.sleep(wait_time)
+        except errors.ClientError as e:
+            if e.code == 429:
+                # rate limits are per minute and per day; if a long wait still hits the limit we have likely exhausted the daily quota and should downgrade the model, so kill the run
+                if attempt == max_retries - 1:
+                    m = "Max rate limit retries reached."
+                    _log_and_print(
+                        f"case_id={case_id} \t\nmodel_id={model_id} \t\n{m}",
+                        log_dir, identifier)
+                    raise RateLimitException(
+                        "Max rate limit retries reached. Killing rest of the full run."
+                    )
+                wait_time = 60 * (2**attempt)
+                m = f"Rate limit (429 error) on attempt {attempt + 1}. Retrying in {wait_time:.1f}s..."
                 _log_and_print(
                     f"case_id={case_id} \t\nmodel_id={model_id} \t\nextract_attempt={attempt + 1} \t\n{m}",
                     log_dir, identifier)
                 time.sleep(wait_time)
             else:
-                m = f"EXCEPTION occurred (non-retryable): {e}"
+                m = f"Client error {e.code} occurred (non-retryable): {e}"
                 _log_and_print(
                     f"case_id={case_id} \t\nmodel_id={model_id} \t\nextract_attempt={attempt + 1} \t\n{m}",
                     log_dir, identifier)
                 return None
+        except Exception as e:
+            m = f"Other exception occurred (non-retryable): {e}"
+            _log_and_print(
+                f"case_id={case_id} \t\nmodel_id={model_id} \t\nextract_attempt={attempt + 1} \t\n{m}",
+                log_dir, identifier)
+            return None
 
-    m = "Max 503 error retries reached. Giving up on this page."
-    _log_and_print(
-        f"case_id={case_id} \t\nmodel_id={model_id} \t\n{m}",
-        log_dir, identifier)
+    m = "Max error retries reached. Giving up on this case."
+    _log_and_print(f"case_id={case_id} \t\nmodel_id={model_id} \t\n{m}",
+                   log_dir, identifier)
     return None
+
+
+# ==============================================================================
+# Processing loop
+# ==============================================================================
 
 
 def process_cases(genai_client,
                   input_dir: str,
-                  data_struct: BaseModel,
+                  data_struct: type[BaseModel],
                   prompt_text: str,
                   model_id: str,
                   outfile_path: str,
                   intermediate_dir: str,
                   to_dataframe_fn,
-                  file_extension: str = "html",
                   case_ids: list = None,
                   log_dir=None,
                   identifier=None,
-                  debug=False):
+                  debug=False,
+                  reuse_old_results: bool = False):
     """
     Extracts structured data from court case opinion files and saves results.
 
@@ -195,11 +258,11 @@ def process_cases(genai_client,
         outfile_path (str): Path to save extracted data.
         intermediate_dir (str): Folder for intermediate outputs.
         to_dataframe_fn: Function converting parsed schema object to dataframe.
-        file_extension (str): Opinion file extension inside each opinion_XXX folder ("html" or "pdf").
         case_ids (list): Optional list of specific case IDs to process. If None, processes all cases.
-        log_dir (str, optional): Directory for writing Gemini error logs.
-        identifier (str, optional): Run identifier used for the Gemini log filename.
+        log_dir (str): Directory for writing Gemini error logs.
+        identifier (str): Run identifier used for the Gemini log filename.
         debug (bool): Enables debug logging.
+        reuse_old_results (bool): If True, cases whose intermediate JSON already exists in intermediate_dir are loaded from disk instead of re-queried.
 
     Returns:
         pd.DataFrame: Aggregated structured data extracted from all cases.
@@ -220,148 +283,192 @@ def process_cases(genai_client,
     max_retries = 5
     start_time = time.time()
 
-    # track issues in real time 
+    # track issues in real time
     error_count = 0
     missing_file_skip_count = 0
 
-    for i, case_id in enumerate(case_ids):
-        # add counter for cases processed
-        print(f"\nProcessing case {case_id} ({i + 1}/{total_cases})...")
-        case_folder = os.path.join(input_dir, f"opinion_{case_id}")
-        opinion_path = os.path.join(case_folder, f"opinion_{case_id}.{file_extension}")
-        file_source_indicator = ""
+    try:
+        for i, case_id in enumerate(case_ids):
+            # add counter for cases processed
+            print(f"\nProcessing case {case_id} ({i + 1}/{total_cases})...")
+            case_folder = os.path.join(input_dir, f"opinion_{case_id}")
+            json_path = os.path.join(intermediate_dir,
+                                     f"coded_opinion_{case_id}.json")
 
-        # Check if opinion file exists
-        if not os.path.exists(opinion_path):
-            if file_extension == "pdf":
-                fallback_html_path = os.path.join(case_folder, f"opinion_{case_id}.html")
-                if os.path.exists(fallback_html_path):
-                    print(
-                        f"WARNING: .pdf file not found for case {case_id}; using .html fallback."
-                    )
-                    opinion_path = fallback_html_path
-                    file_source_indicator = "pdf not found, html used"
-                else:
-                    print(
-                        f"WARNING: .pdf file not found for case {case_id}, and .html fallback also missing; skipping..."
-                    )
-                    file_source_indicator = "pdf not found, html not found"
-                    missing_file_skip_count += 1
-                    continue
-            else:
+            # Resume support: load intermediate JSON if it already exists rather than re-querying Gemini
+            if reuse_old_results and os.path.exists(json_path):
                 print(
-                    f"WARNING: .{file_extension} file not found for case {case_id}, skipping..."
+                    f"  Case {case_id} ({i + 1}/{total_cases}): intermediate JSON exists, reusing cached result."
+                )
+                with open(json_path, "r", encoding="utf-8") as file:
+                    result_json = json.load(file)
+                result = data_struct.model_validate(result_json)
+                df = to_dataframe_fn(result)
+                for key in ("opinion_id", "file_source_indicator", "model_id"):
+                    if key in result_json:
+                        df[key] = result_json[key]
+                all_dataframes.append(df)
+                continue
+
+            # try to attach both html and pdf files if available
+            html_path = os.path.join(case_folder, f"opinion_{case_id}.html")
+            pdf_path = os.path.join(case_folder, f"opinion_{case_id}.pdf")
+            case_opinion_paths = [
+                p for p in (html_path, pdf_path) if os.path.exists(p)
+            ]
+
+            if not case_opinion_paths:
+                print(
+                    f"WARNING: no html or pdf file found for case {case_id}, skipping..."
                 )
                 missing_file_skip_count += 1
                 continue
-        elif file_extension == "pdf":
-            file_source_indicator = "pdf used"
 
-        retries = 0
-        success = False
-        prompt = prompt_text
-        df = None
+            file_source_indicator = "+".join(
+                os.path.splitext(p)[1].lstrip(".") for p in case_opinion_paths)
 
-        while retries < max_retries and not success:
-            try:
-                print(f"\t(Attempt {retries + 1})...")
+            retries = 0
+            success = False
+            prompt = prompt_text
+            df = None
 
-                # Upload opinion file
-                uploaded_file = upload_to_API(genai_client,
-                                              opinion_path,
-                                              log_dir=log_dir,
-                                              identifier=identifier)
+            while retries < max_retries and not success:
+                try:
+                    print(f"\t(Attempt {retries + 1})...")
 
-                # Extract case data
-                result = extract_case_data(genai_client, uploaded_file,
-                                           data_struct, prompt, model_id,
-                                           case_id=case_id,
-                                           log_dir=log_dir,
-                                           identifier=identifier,
-                                           debug=debug)
+                    # Upload each available opinion file
+                    uploaded_files = [
+                        upload_to_API(genai_client,
+                                      p,
+                                      log_dir=log_dir,
+                                      identifier=identifier)
+                        for p in case_opinion_paths
+                    ]
 
-                if result:
-                    success = True
-                    runtime_metadata = {
-                        "opinion_id": case_id,
-                        "file_source_indicator": file_source_indicator,
-                        "model_id": model_id
-                    }
+                    # Extract case data
+                    result = extract_case_data(genai_client,
+                                               uploaded_files,
+                                               data_struct,
+                                               prompt,
+                                               model_id,
+                                               case_id=case_id,
+                                               log_dir=log_dir,
+                                               identifier=identifier,
+                                               debug=debug)
 
-                    # add additional tracked information to the json 
-                    json_path = os.path.join(intermediate_dir,
-                                             f"coded_opinion_{case_id}.json")
-                    result_json = result.model_dump()
-                    result_json.update(runtime_metadata)
+                    if result:
+                        success = True
+                        runtime_metadata = {
+                            "opinion_id": case_id,
+                            "file_source_indicator": file_source_indicator,
+                            "model_id": model_id
+                        }
 
-                    # save intermediate data structure to json
-                    # (for the future - to handle unplanned termination and be able to resume from existing progress)
-                    with open(json_path, "w", encoding="utf-8") as file:
-                        json.dump(result_json, file, indent=4, ensure_ascii=False)
-                    print(
-                        f"  Saved intermediate JSON of coded opinion to {json_path}"
-                    )
+                        # add additional tracked information to the json
+                        json_path = os.path.join(
+                            intermediate_dir, f"coded_opinion_{case_id}.json")
+                        result_json = result.model_dump()
+                        result_json.update(runtime_metadata)
 
-                    df = to_dataframe_fn(result)
-                    # add metadata to final dataframe
-                    for key, value in runtime_metadata.items():
-                        df[key] = value
-
-                    # Immediately delete the uploaded file to avoid storage limits
-                    try:
-                        genai_client.files.delete(name=uploaded_file.name)
-                        print(f"Deleted uploaded file: {uploaded_file.name}")
-                    except Exception as e:
+                        # save intermediate data structure to json to handle unplanned termination and be able to resume from existing progress
+                        with open(json_path, "w", encoding="utf-8") as file:
+                            json.dump(result_json,
+                                      file,
+                                      indent=4,
+                                      ensure_ascii=False)
                         print(
-                            f"Warning: failed to delete uploaded file {uploaded_file.name}: {e}"
+                            f"  Saved intermediate JSON of coded opinion to {json_path}"
                         )
 
-                else:
-                    m = f"FAILURE - No data found for case {case_id}."
-                    _log_and_print(
-                        f"case_id={case_id} \t\nfile_source_indicator={file_source_indicator} \t\nmodel_id={model_id} \t\n{m}",
-                        log_dir, identifier)
+                        df = to_dataframe_fn(result)
+                        # add metadata to final dataframe
+                        for key, value in runtime_metadata.items():
+                            df[key] = value
 
-            except requests.exceptions.ConnectionError as e:
-                m = f"Connection error for opinion {case_id}: {e}"
+                        # Immediately delete the uploaded files to avoid storage limits
+                        for uploaded_file in uploaded_files:
+                            try:
+                                genai_client.files.delete(
+                                    name=uploaded_file.name)
+                                print(
+                                    f"Deleted uploaded file: {uploaded_file.name}"
+                                )
+                            except Exception as e:
+                                print(
+                                    f"Warning: failed to delete uploaded file {uploaded_file.name}: {e}"
+                                )
+
+                    else:
+                        m = f"FAILURE - No data found for case {case_id}."
+                        _log_and_print(
+                            f"case_id={case_id} \t\nfile_source_indicator={file_source_indicator} \t\nmodel_id={model_id} \t\n{m}",
+                            log_dir, identifier)
+
+                except requests.exceptions.ConnectionError as e:
+                    m = f"Connection error for opinion {case_id}: {e}"
+                    _log_and_print(
+                        f"case_id={case_id} \t\ncase_attempt={retries + 1} \t\nfile_source_indicator={file_source_indicator} \t\n{m}",
+                        log_dir, identifier)
+                    retries += 1
+                    if retries < max_retries:
+                        m = f"Retrying opinion {case_id} in 5 seconds..."
+                        _log_and_print(
+                            f"case_id={case_id} \t\ncase_attempt={retries + 1} \t\n{m}",
+                            log_dir, identifier)
+                        time.sleep(5)
+                    else:
+                        _log_and_print(
+                            f"Max retries reached for case {case_id}. Raising ValueError.",
+                            log_dir, identifier)
+                        print(
+                            f"Warning: Max retries reached for case {case_id}."
+                        )
+
+            if not success:
+                error_count += 1
+                # continue
+
+            # Combine output
+            if success and df is not None:
+                all_dataframes.append(df)
+
+            total_time_elapsed = time.time() - start_time
+            avg_time_per_case = total_time_elapsed / (i + 1)
+            # print(f"Total time elapsed: {total_time_elapsed / 3600:.2f} hrs")
+            # print(f"Average time per case so far: {avg_time_per_case:.2f} s")
+            # print(f"Cases with no Gemini output so far: {error_count}")
+            # print(
+            #     f"Cases skipped for missing files so far: {missing_file_skip_count}"
+            # )
+
+            if (i + 1) % 10 == 0:
+                _log_and_print(f"Progress: {i + 1}/{total_cases}", log_dir,
+                               identifier)
                 _log_and_print(
-                    f"case_id={case_id} \t\ncase_attempt={retries + 1} \t\nfile_source_indicator={file_source_indicator} \t\n{m}",
+                    f"Total time elapsed: {total_time_elapsed / 3600:.2f} hrs",
                     log_dir, identifier)
-                retries += 1
-                if retries < max_retries:
-                    m = f"Retrying opinion {case_id} in 5 seconds..."
-                    _log_and_print(
-                        f"case_id={case_id} \t\ncase_attempt={retries + 1} \t\n{m}",
-                        log_dir, identifier)
-                    time.sleep(5)
-                else:
-                    _log_and_print(
-                        f"Max retries reached for case {case_id}. Raising ValueError.",
-                        log_dir, identifier)
-                    print(f"Warning: Max retries reached for case {case_id}.")
-               
+                _log_and_print(
+                    f"Average time per Gemini query so far: {avg_time_per_case:.2f} s",
+                    log_dir, identifier)
+                _log_and_print(
+                    f"Cases with no Gemini output so far: {error_count}",
+                    log_dir, identifier)
+                _log_and_print(
+                    f"Cases skipped for missing files so far: {missing_file_skip_count}",
+                    log_dir, identifier)
 
-            # TODO: add error handling for other errors
-            # (EXCEPTION occurred (non-retryable): 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'Resource exhausted. Please try again later. Please refer to https://cloud.google.com/vertex-ai/generative-ai/docs/error-code-429 for more details.', 'status': 'RESOURCE_EXHAUSTED'}}
-            # rate limits are per minute and per day. first try to wait a minute, if that doesn't work, then wait until the end of the day (compute how much time left). 
-            # it would be good to also send an email... if we hit the day rate limit then we screwed up and should downgrade to a lower model 
+    except KeyboardInterrupt:
+        _log_and_print("RUN INTERRUPTED by user.", log_dir, identifier)
+        _save_partial_results(all_dataframes, outfile_path, log_dir,
+                              identifier, "Keyboard interrupt")
+        raise
+    except RateLimitException as e:
+        _log_and_print(f"FATAL rate limit error: {e}", log_dir, identifier)
+        _save_partial_results(all_dataframes, outfile_path, log_dir,
+                              identifier, "Fatal rate limit stop")
+        raise
 
-        if not success:
-            error_count += 1
-            # continue
-
-        # Combine output
-        if success and df is not None:
-            all_dataframes.append(df)
-
-        total_time_elapsed = time.time() - start_time
-        avg_time_per_case = total_time_elapsed / (i + 1)
-        print(f"Total time elapsed: {total_time_elapsed / 3600:.2f} hrs")
-        print(f"Average time per case so far: {avg_time_per_case:.2f} s")
-        print(f"Cases with no Gemini output so far: {error_count}")
-        print(f"Cases skipped for missing files so far: {missing_file_skip_count}")
-
-    # log error and missing file counts to log file 
+    # log error and missing file counts to log file
     m = f"Total cases with no Gemini output: {error_count}"
     _log_and_print(m, log_dir, identifier)
     m = f"Total cases skipped for missing files: {missing_file_skip_count}"
