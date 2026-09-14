@@ -4,7 +4,7 @@
 #SBATCH --output="/nfs/roberts/project/pi_zdl3/shared/NEPA court case project/slurm_logs/gemini_extraction_%j.log"
 #
 #SBATCH --time=3-00:00:00
-#SBATCH --mem=50G
+#SBATCH --mem=10G
 #SBATCH --ntasks=1
 #
 #SBATCH --mail-type=FAIL,END
