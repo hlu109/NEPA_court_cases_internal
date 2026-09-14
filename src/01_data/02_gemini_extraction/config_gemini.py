@@ -25,8 +25,8 @@ gemini_model_id = "gemini-2.5-flash"
 prompt_text_name = "case_prompt.txt"
 
 # SET RESUME PARAMETERS ---------------------------------------------------------
-REUSE_OLD_RESULTS = False
-RESUME_RUN_IDENTIFIER = None
+REUSE_OLD_RESULTS = True
+RESUME_RUN_IDENTIFIER = "gemini_20260914_114005"
 
 # SET FILE PATHS -------------------------------------------
 # Set input directory run identifier
