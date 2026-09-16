@@ -15,29 +15,16 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-
 from utils.config import (
-    INTERMEDIATE_DATA_DIR,
-    ADELGLICKS_RAW_PATH, 
-    ADELGLICKS_SHEET_NAME, 
-    ADELGLICKS_CLEANED_PATH,
-    COURTLISTENER_CLUSTER_CLEANED_PATH,
-    COURTLISTENER_AG_MATCH_STATS_PATH,
-    COURTLISTENER_AG_MATCHING_PATH,
-    COURTLISTENER_AG_MATCHING_SPLIT_PATH,
-    FTR_ASSIGNMENTS_DIR,
-    AG_VAL_ASSIGNMENTS_PATH,
-    AG_TEST_ASSIGNMENTS_PATH,
-    CL_TRAIN_ASSIGNMENTS_PATH,
-    COURTLISTENER_RAW_DIR,
-    LLM_OPINION_CLF_RAW_PATH,
-    LLM_OPINION_CLF_PATH,
-    LLM_JUDGES_CLF_RAW_PATH,
-    LLM_JUDGES_CLF_PATH,
-    CL_TRAIN_PREDICTIONS_PATH,
-    COURTLISTENER_METADATA_W_FTRS_PATH,
-    USGOV_PL_PATH
-)
+    INTERMEDIATE_DATA_DIR, ADELGLICKS_RAW_PATH, ADELGLICKS_SHEET_NAME,
+    ADELGLICKS_CLEANED_PATH, COURTLISTENER_CLUSTER_CLEANED_PATH,
+    COURTLISTENER_AG_MATCH_STATS_PATH, COURTLISTENER_AG_MATCHING_PATH,
+    COURTLISTENER_AG_MATCHING_SPLIT_PATH, FTR_ASSIGNMENTS_DIR,
+    AG_VAL_ASSIGNMENTS_PATH, AG_TEST_ASSIGNMENTS_PATH,
+    CL_TRAIN_ASSIGNMENTS_PATH, COURTLISTENER_RAW_DIR, LLM_OPINION_CLF_RAW_PATH,
+    LLM_OPINION_CLF_PATH, LLM_JUDGES_CLF_RAW_PATH, LLM_JUDGES_CLF_PATH,
+    CL_TRAIN_PREDICTIONS_PATH, COURTLISTENER_METADATA_W_FTRS_PATH,
+    USGOV_PL_PATH)
 
 
 def _normalize_dash_characters(text: str) -> str:
@@ -79,7 +66,7 @@ def _standardize_judge_string(judge_series: pd.Series) -> pd.Series:
     """
     judge_string = judge_series.fillna("").astype(str).str.strip().str.upper()
     return judge_string
-    
+
 
 def _extract_last_name(name: str) -> str:
     name = str(name).strip()
@@ -88,17 +75,19 @@ def _extract_last_name(name: str) -> str:
     suffixes = {"JR", "SR", "II", "III", "IV", "V"}
     last_name = ""
     # handle "last, first" format as well as "first middle last, suffix" format
-    if "," in name:  
+    if "," in name:
         comma_parts = [part.strip() for part in name.split(",")]
         # check if the second part matches a suffix (after dropping the period)
-        if len(comma_parts) > 1 and comma_parts[1].replace(".", "").upper() in suffixes:
+        if len(comma_parts) > 1 and comma_parts[1].replace(
+                ".", "").upper() in suffixes:
             tokens = [t for t in re.split(r"\s+", comma_parts[0]) if t]
             last_name = tokens[-1] if tokens else ""
         else:
             last_name = comma_parts[0]
     else:
         # "first middle last" format
-        tokens = [t for t in re.split(r"\s+", name) if t] # (first (middle) last) format
+        tokens = [t for t in re.split(r"\s+", name)
+                  if t]  # (first (middle) last) format
         last_name = tokens[-1] if tokens else ""
 
     # handle character encoding issues
@@ -108,17 +97,19 @@ def _extract_last_name(name: str) -> str:
 
     # remove any non-alphabetic characters, including apostrophes
     # (apostrophes are also causing character encoding issues sometimes - easier to just remove them)
-    last_name = re.sub(r"[^A-Za-z]", "", last_name) 
+    last_name = re.sub(r"[^A-Za-z]", "", last_name)
 
-    # manually correct typos 
+    # manually correct typos
     last_name = last_name.replace("TYMKOVCH", "TYMKOVICH")
-    if last_name == "SCANNLAIN": # can't use .replace() since it also will match to substrings and turn "OSCANNLAIN" into "OOSCANNLAIN"
+    if last_name == "SCANNLAIN":  # can't use .replace() since it also will match to substrings and turn "OSCANNLAIN" into "OOSCANNLAIN"
         last_name = "OSCANNLAIN"
 
     return last_name
 
+
 def _extract_last_names_from_list(names):
     return [_extract_last_name(name) for name in names]
+
 
 def clean_adelglicks_dockets(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -138,11 +129,11 @@ def clean_adelglicks_dockets(df: pd.DataFrame) -> pd.DataFrame:
     for col in ['docket_no1', 'docket_no2', 'docket_no3']:
         if col in df.columns:
             # convert docket numbers to strings but prevent nan's from being converted to strings that say "nan"
-            df[col] = df[col].fillna('').astype(str) 
+            df[col] = df[col].fillna('').astype(str)
 
             # Normalize dash characters for consistency with CourtListener data
-            df[col] = df[col].apply(
-                lambda x: _normalize_dash_characters(x) if pd.notna(x) else x)
+            df[col] = df[col].apply(lambda x: _normalize_dash_characters(x)
+                                    if pd.notna(x) else x)
 
             # Strip whitespace
             df[col] = df[col].str.strip() if df[col].notna().any() else df[col]
@@ -162,7 +153,7 @@ def clean_adelglicks_outcomes(df: pd.DataFrame) -> pd.DataFrame:
     df['decision'] = df['decision'].str.strip().str.lower()
     df['rev_aff'] = df['rev_aff'].str.strip().str.lower()
 
-    # TODO: we are just ignoring petitions that get denied/dismissed/granted for now because we cannot determine the prevailing party with the AdelGlicks data right now  
+    # TODO: we are just ignoring petitions that get denied/dismissed/granted for now because we cannot determine the prevailing party with the AdelGlicks data right now
     df['district_outcome'] = df['decision'].map({
         'aff_def': 'defendant',
         'aff_pl': 'plaintiff',
@@ -173,7 +164,6 @@ def clean_adelglicks_outcomes(df: pd.DataFrame) -> pd.DataFrame:
         "granted": None,
         "dismissed": None,
     })
-    
 
     df['disposition'] = df['rev_aff'].map({
         'aff': 'affirm',
@@ -184,7 +174,7 @@ def clean_adelglicks_outcomes(df: pd.DataFrame) -> pd.DataFrame:
     df.loc[df['decision'] == 'mixed', 'disposition'] = 'mixed'
     # if "decision" was denied, this correctly codes that the appellate court affirmed the district court's decision (no change to coding needed)
     # if "decision" was granted, this correctly codes that the appellate court reversed the district court's decision (no change to coding needed)
-    # if "decision" was dismissed, this seems more complicated, but we stick with the AdelGLicks coding for now 
+    # if "decision" was dismissed, this seems more complicated, but we stick with the AdelGLicks coding for now
 
     # Create column for final party favored by appellate decision (plaintiff or defendant)
     df['prevailing_party'] = df['decision'].map({
@@ -196,9 +186,8 @@ def clean_adelglicks_outcomes(df: pd.DataFrame) -> pd.DataFrame:
         "denied": None,
         "granted": None,
         "dismissed": None,
-    }) 
-    # Note the "appellee" column is consistently wrong in AdelGlicks data so if there is a petition we don't know which party won in district court and thus can't code prevailing party for denied,granted, or dismissed petitions. 
-
+    })
+    # Note the "appellee" column is consistently wrong in AdelGlicks data so if there is a petition we don't know which party won in district court and thus can't code prevailing party for denied,granted, or dismissed petitions.
 
     print("Unmapped district outcomes:")
     print(df['district_outcome'].isna().sum())
@@ -210,28 +199,31 @@ def clean_adelglicks_outcomes(df: pd.DataFrame) -> pd.DataFrame:
 
     return df
 
+
 def clean_adelglicks_judges(df: pd.DataFrame) -> pd.DataFrame:
     """ Rename the dataframe columns to be consistent with CourtListener judges data.
     """
-    df = df.rename(columns={
-        "judge_1": "panel_judge_1",
-        "judge_2": "panel_judge_2",
-        "judge_3": "panel_judge_3",
-    })
+    df = df.rename(
+        columns={
+            "judge_1": "panel_judge_1",
+            "judge_2": "panel_judge_2",
+            "judge_3": "panel_judge_3",
+        })
 
-    # normalize 
+    # normalize
     df["panel_judge_1"] = _standardize_judge_string(df["panel_judge_1"])
     df["panel_judge_2"] = _standardize_judge_string(df["panel_judge_2"])
     df["panel_judge_3"] = _standardize_judge_string(df["panel_judge_3"])
 
-    # extract last name 
+    # extract last name
     df["panel_judge_1"] = df["panel_judge_1"].apply(_extract_last_name)
     df["panel_judge_2"] = df["panel_judge_2"].apply(_extract_last_name)
     df["panel_judge_3"] = df["panel_judge_3"].apply(_extract_last_name)
 
     return df
 
-def clean_adelglicks_data(adelglicks_raw_path: str, sheet_name: str, 
+
+def clean_adelglicks_data(adelglicks_raw_path: str, sheet_name: str,
                           output_path: str) -> pd.DataFrame:
     """
     Clean and standardize AdelGlicks dataset.
@@ -246,15 +238,15 @@ def clean_adelglicks_data(adelglicks_raw_path: str, sheet_name: str,
     """
     print(f"Loading AdelGlicks data from {adelglicks_raw_path}...")
     df = pd.read_excel(adelglicks_raw_path, sheet_name=sheet_name)
-    
+
     # Standardize docket numbers
     print("Standardizing docket numbers...")
     df = clean_adelglicks_dockets(df)
-    
+
     # Harmonize other variables (year, court/circuit, lead agency)
     # year_filed is already present
     print("Harmonizing other variables...")
-    
+
     df['court_id'] = df['circuit'].map({
         'DC Circuit': 'cadc',
         'First Circuit': 'ca1',
@@ -277,25 +269,23 @@ def clean_adelglicks_data(adelglicks_raw_path: str, sheet_name: str,
     df = clean_adelglicks_outcomes(df)
     df = clean_adelglicks_judges(df)
 
-    # Drop rows that are perfect duplicates 
+    # Drop rows that are perfect duplicates
     df = df.drop_duplicates()
-    
+
     # Save cleaned data
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     df.to_csv(output_path, index=False, quoting=csv.QUOTE_NONNUMERIC)
     print(f"\nSaved cleaned data to {output_path}")
-    
+
     return df
 
 
 def clean_adelglicks_main():
-    clean_adelglicks_data(
-        adelglicks_raw_path=str(ADELGLICKS_RAW_PATH),
-        sheet_name=ADELGLICKS_SHEET_NAME,
-        output_path=str(ADELGLICKS_CLEANED_PATH)
-    )
+    clean_adelglicks_data(adelglicks_raw_path=str(ADELGLICKS_RAW_PATH),
+                          sheet_name=ADELGLICKS_SHEET_NAME,
+                          output_path=str(ADELGLICKS_CLEANED_PATH))
 
 
 # ------------------------------------------------------------------------------
@@ -323,27 +313,35 @@ def find_lead_opinion(cluster_id: int, opinion_df: pd.DataFrame) -> str:
         return ''
 
     # Look for lead opinions
-    lead_opinion = cluster_opinions[cluster_opinions['opinion_type'] == '020lead']
+    lead_opinion = cluster_opinions[cluster_opinions['opinion_type'] ==
+                                    '020lead']
     if not lead_opinion.empty:
-        return lead_opinion.iloc[0]['opinion_id']  # return the first '020lead' opinion id
-    plurality_opinion = cluster_opinions[cluster_opinions['opinion_type'] == '025plurality']
+        return lead_opinion.iloc[0][
+            'opinion_id']  # return the first '020lead' opinion id
+    plurality_opinion = cluster_opinions[cluster_opinions['opinion_type'] ==
+                                         '025plurality']
     if not plurality_opinion.empty:
-        return plurality_opinion.iloc[0]['opinion_id']  # return the first '025plurality' opinion id
+        return plurality_opinion.iloc[0][
+            'opinion_id']  # return the first '025plurality' opinion id
 
-    unanimous_opinion = cluster_opinions[cluster_opinions['opinion_type'] == '015unanimous']
+    unanimous_opinion = cluster_opinions[cluster_opinions['opinion_type'] ==
+                                         '015unanimous']
     if not unanimous_opinion.empty:
-        return unanimous_opinion.iloc[0]['opinion_id']  # return the first '015unanimous' opinion id
+        return unanimous_opinion.iloc[0][
+            'opinion_id']  # return the first '015unanimous' opinion id
 
-    combined_opinion = cluster_opinions[cluster_opinions['opinion_type'] == '010combined']
+    combined_opinion = cluster_opinions[cluster_opinions['opinion_type'] ==
+                                        '010combined']
     if not combined_opinion.empty:
-        return combined_opinion.iloc[0]['opinion_id']  # return the first '010combined' opinion id
+        return combined_opinion.iloc[0][
+            'opinion_id']  # return the first '010combined' opinion id
 
     # If no lead opinion found
     return ''
 
 
 def map_clusters_to_lead_opinions(cluster_df: pd.DataFrame,
-                                   opinion_df: pd.DataFrame) -> pd.DataFrame:
+                                  opinion_df: pd.DataFrame) -> pd.DataFrame:
     """
     Map each cluster to its lead opinion ID.
 
@@ -370,12 +368,13 @@ def map_clusters_to_lead_opinions(cluster_df: pd.DataFrame,
 
     # Map each cluster to its lead opinion
     cluster_df['lead_opinion_id'] = cluster_df['cluster_id'].apply(
-        lambda cid: find_lead_opinion(cid, opinion_df)
-    )
+        lambda cid: find_lead_opinion(cid, opinion_df))
 
     # Report statistics
     mapped_count = cluster_df['lead_opinion_id'].notna().sum()
-    print(f"  Mapped {mapped_count} clusters ({mapped_count/len(cluster_df)*100:.1f}%) to lead opinions")
+    print(
+        f"  Mapped {mapped_count} clusters ({mapped_count/len(cluster_df)*100:.1f}%) to lead opinions"
+    )
     print(f"  {len(cluster_df) - mapped_count} clusters without lead opinions")
 
     return cluster_df
@@ -407,18 +406,11 @@ def parse_courtlistener_docket_string(docket_str: str) -> List[str]:
     # Normalize dash characters first
     docket_str = _normalize_dash_characters(docket_str)
 
-    # Remove common prefixes and text patterns 
+    # Remove common prefixes and text patterns
     prefixes = [
-        r'Civil Action No\.\s*',
-        r'Civil No\.\s*',
-        r'Case No\.\s*',
-        r'Docket\s+',
-        r'Docket No\.\s*',
-        r'D.C. No\.\s*',
-        r'DOCKETS \s+',
-        r'Nos?\.\s*',
-        r'Civ\.\s*A\.\s*',
-        r'CV-\s*'
+        r'Civil Action No\.\s*', r'Civil No\.\s*', r'Case No\.\s*',
+        r'Docket\s+', r'Docket No\.\s*', r'D.C. No\.\s*', r'DOCKETS \s+',
+        r'Nos?\.\s*', r'Civ\.\s*A\.\s*', r'CV-\s*'
     ]
     # text_patterns = [
     #     r'\s*\([^)]*\)\s*', # parenthetical info
@@ -430,11 +422,12 @@ def parse_courtlistener_docket_string(docket_str: str) -> List[str]:
     # for text_pattern in text_patterns:
     #     docket_str = re.sub(text_pattern, '', docket_str).strip()
 
-
     # Handle "Consolidated with" or "C/w" patterns
     consolidated_pattern = r'(?:Consolidated with|C/w)\s+'
-    docket_str = re.sub(consolidated_pattern, ', ',
-                        docket_str, flags=re.IGNORECASE)
+    docket_str = re.sub(consolidated_pattern,
+                        ', ',
+                        docket_str,
+                        flags=re.IGNORECASE)
 
     # Extract all potential docket numbers
     dockets = []
@@ -496,10 +489,9 @@ def parse_courtlistener_docket_string(docket_str: str) -> List[str]:
     return cleaned_dockets
 
 
-def clean_courtlistener_dockets(
-        df: pd.DataFrame,
-        docket_col: str = 'docketNumber',
-        max_columns: int = 5) -> pd.DataFrame:
+def clean_courtlistener_dockets(df: pd.DataFrame,
+                                docket_col: str = 'docketNumber',
+                                max_columns: int = 5) -> pd.DataFrame:
     """
     Process a CourtListener dataframe to split docket numbers into separate columns.
 
@@ -523,13 +515,11 @@ def clean_courtlistener_dockets(
     for i in range(max_columns):
         col_name = f'docket_no{i+1}'
         df[col_name] = df['docket_numbers_parsed'].apply(
-            lambda x: x[i] if i < len(x) else None
-        )
+            lambda x: x[i] if i < len(x) else None)
 
     # Clean up columns
     df['docket_numbers_parsed'] = df['docket_numbers_parsed'].apply(
-        lambda x: '; '.join(x) if isinstance(x, list) else x
-    )
+        lambda x: '; '.join(x) if isinstance(x, list) else x)
     df = df.rename(columns={'docketNumber': 'docket_numbers_raw'})
 
     return df
@@ -546,11 +536,13 @@ def drop_nonNEPA_cases(df: pd.DataFrame) -> pd.DataFrame:
         Filtered dataframe with non-NEPA cases removed.
     """
     df = df.copy()
-    mb_df = pd.read_csv(USGOV_PL_PATH, encoding = "latin-1") # utf-8 encoding doesn't work for some reason (can't decode byte 0xd5 in position 47954)
+    mb_df = pd.read_csv(
+        USGOV_PL_PATH, encoding="latin-1"
+    )  # utf-8 encoding doesn't work for some reason (can't decode byte 0xd5 in position 47954)
 
-    non_nepa_cluster_ids = mb_df.loc[
-        mb_df["include_in_analysis"] == 0, "cluster_id"
-    ].dropna().astype(str).unique()
+    non_nepa_cluster_ids = mb_df.loc[mb_df["include_in_analysis"] == 0,
+                                     "cluster_id"].dropna().astype(
+                                         str).unique()
 
     before_count = len(df)
     df = df[~df["cluster_id"].astype(str).isin(non_nepa_cluster_ids)]
@@ -580,12 +572,11 @@ def clean_cluster_metadata(cluster_metadata_path: str,
     print(f"\nLoading opinion metadata from {opinion_metadata_path}...")
     opinion_df = pd.read_csv(opinion_metadata_path)
 
-    # handle cases with US gov plaintiffs  
+    # handle cases with US gov plaintiffs
     cluster_df = drop_nonNEPA_cases(cluster_df)
 
     # Clean docket numbers
-    cluster_df = clean_courtlistener_dockets(
-        cluster_df, max_columns=5)
+    cluster_df = clean_courtlistener_dockets(cluster_df, max_columns=5)
 
     # Harmonize other variables (year, court/circuit, lead agency)
     print("\nHarmonizing other variables...")
@@ -599,13 +590,13 @@ def clean_cluster_metadata(cluster_metadata_path: str,
 
     # Re-sort column variables alphabetically
     cluster_df = cluster_df.reindex(sorted(cluster_df.columns), axis=1)
-    
-    # Drop rows that are duplicates 
+
+    # Drop rows that are duplicates
     cluster_df = cluster_df.drop_duplicates(subset=["cluster_id"])
 
-    # Clean judge names 
+    # Clean judge names
     cluster_df = clean_courtlistener_judges(cluster_df)
-    # drop the "judge" column - this is the unclean and often incorrect version 
+    # drop the "judge" column - this is the unclean and often incorrect version
     cluster_df = cluster_df.drop(columns=["judge"])
 
     # Save cleaned data
@@ -628,15 +619,17 @@ def infer_prevailing_party(df: pd.DataFrame) -> pd.DataFrame:
     assert "disposition" in df.columns, "disposition column not found in input CSV"
 
     # Create column for final party favored by appellate decision (plaintiff or defendant)
-    df['prevailing_party'] = None 
+    df['prevailing_party'] = None
 
     # if disposition is affirm, then prevailing party = district outcome
-    df.loc[df['disposition'] == 'affirm', 'prevailing_party'] = df['district_outcome']
+    df.loc[df['disposition'] == 'affirm',
+           'prevailing_party'] = df['district_outcome']
     # if disposition is reverse, then prevailing party = opposite of district outcome
-    df.loc[df['disposition'] == 'reverse', 'prevailing_party'] = df['district_outcome'].map(
-        lambda x: 'defendant' if x == 'plaintiff' else 'plaintiff' if x == 'defendant' else None
-    )
-    # handle mixed and unknown dispositions 
+    df.loc[df['disposition'] == 'reverse',
+           'prevailing_party'] = df['district_outcome'].map(
+               lambda x: 'defendant' if x == 'plaintiff' else 'plaintiff'
+               if x == 'defendant' else None)
+    # handle mixed and unknown dispositions
     df.loc[df['disposition'] == 'mixed', 'prevailing_party'] = 'mixed'
     df.loc[df['disposition'] == 'UNK', 'prevailing_party'] = 'UNK'
 
@@ -660,8 +653,8 @@ def infer_prevailing_party(df: pd.DataFrame) -> pd.DataFrame:
         "UNK": None,
     })
 
-    # infer the pro- or anti-development stance of the outcome 
-    # usually, the US gov is the defendant, and the defendant winning is pro-development 
+    # infer the pro- or anti-development stance of the outcome
+    # usually, the US gov is the defendant, and the defendant winning is pro-development
     df["pro_dev_district_score"] = df["district_outcome"].map({
         "defendant": 1,
         "plaintiff": 0,
@@ -674,30 +667,41 @@ def infer_prevailing_party(df: pd.DataFrame) -> pd.DataFrame:
         "mixed": 0.5,
         "UNK": None,
     })
-    # however, sometimes the US gov is the plaintiff. generally in these cases we'll assume that plaintiff/US gov winning is pro development (need to flip the pro-development score). but there are also a couple places where the gov/plaintiff losing, and non-gov defendant winning, is pro-development (ultimately no change to pro-development score). 
-    usgov_pl_df = pd.read_csv(USGOV_PL_PATH, encoding = "latin-1") # utf-8 encoding doesn't work for some reason (can't decode byte 0xd5 in position 47954)
+    # however, sometimes the US gov is the plaintiff. generally in these cases we'll assume that plaintiff/US gov winning is pro development (need to flip the pro-development score). but there are also a couple places where the gov/plaintiff losing, and non-gov defendant winning, is pro-development (ultimately no change to pro-development score).
+    usgov_pl_df = pd.read_csv(
+        USGOV_PL_PATH, encoding="latin-1"
+    )  # utf-8 encoding doesn't work for some reason (can't decode byte 0xd5 in position 47954)
 
-    # get everything where the US government is the plaintiff. ignore the stuff Maggie says to drop from analysis. don't touch the stuff where gov losing is pro-development. 
-    opinion_ids_to_flip = usgov_pl_df.loc[
-            ((usgov_pl_df["include_in_analysis"] == 1) & (usgov_pl_df["gov_losing_as_pro_dev"] != 1)),
-            "opinion_id"
-        ].unique()
-    # flip the mapping for these specific cases 
+    # get everything where the US government is the plaintiff. ignore the stuff Maggie says to drop from analysis. don't touch the stuff where gov losing is pro-development.
+    opinion_ids_to_flip = usgov_pl_df.loc[(
+        (usgov_pl_df["include_in_analysis"] == 1) &
+        (usgov_pl_df["gov_losing_as_pro_dev"] != 1)), "opinion_id"].unique()
+    # flip the mapping for these specific cases
     flip_mask = df["opinion_id"].isin(opinion_ids_to_flip)
-    df.loc[flip_mask, "pro_dev_district_score"] = df.loc[
-        flip_mask, "district_outcome"].map({
-            "defendant": 0,
-            "plaintiff": 1,
-            "mixed": 0.5,
-            "UNK": None,
-        })
-    df.loc[flip_mask, "pro_dev_prevailing_score"] = df.loc[
-        flip_mask, "prevailing_party"].map({
-            "defendant": 0,
-            "plaintiff": 1,
-            "mixed": 0.5,
-            "UNK": None,
-        })
+    df.loc[flip_mask,
+           "pro_dev_district_score"] = df.loc[flip_mask,
+                                              "district_outcome"].map({
+                                                  "defendant":
+                                                  0,
+                                                  "plaintiff":
+                                                  1,
+                                                  "mixed":
+                                                  0.5,
+                                                  "UNK":
+                                                  None,
+                                              })
+    df.loc[flip_mask,
+           "pro_dev_prevailing_score"] = df.loc[flip_mask,
+                                                "prevailing_party"].map({
+                                                    "defendant":
+                                                    0,
+                                                    "plaintiff":
+                                                    1,
+                                                    "mixed":
+                                                    0.5,
+                                                    "UNK":
+                                                    None,
+                                                })
     return df
 
 
@@ -709,7 +713,11 @@ def clean_llm_outcomes():
     cl_df = infer_prevailing_party(cl_df)
 
     # reorder columns
-    cl_df = cl_df[["opinion_id", "district_outcome", "disposition", "prevailing_party", "district_score", "disposition_score", "prevailing_score", "pro_dev_district_score", "pro_dev_prevailing_score", "model_id"]]
+    cl_df = cl_df[[
+        "opinion_id", "district_outcome", "disposition", "prevailing_party",
+        "district_score", "disposition_score", "prevailing_score",
+        "pro_dev_district_score", "pro_dev_prevailing_score", "model_id"
+    ]]
 
     # save to CSV
     LLM_OPINION_CLF_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -727,24 +735,29 @@ def clean_llm_judges() -> pd.DataFrame:
     """
     df = pd.read_csv(LLM_JUDGES_CLF_RAW_PATH)
 
+    # drop case outcomes from the judge data
+    # TODO: handle the unified Gemini output more gracefully later
+    df = df.drop(columns=["district_outcome", "disposition"], errors="ignore")
+
     # normalize judge names
     panel_values = _standardize_judge_string(df["panel_judges"])
     author_values = _standardize_judge_string(df["opinion_authors"])
 
     # identify en banc and per curiam cases
-    df["en_banc"] = panel_values.str.contains("EN BANC", regex=False).astype(int)
-    df["per_curiam"] = author_values.str.contains("PER CURIAM", regex=False).astype(int)
+    df["en_banc"] = panel_values.str.contains("EN BANC",
+                                              regex=False).astype(int)
+    df["per_curiam"] = author_values.str.contains("PER CURIAM",
+                                                  regex=False).astype(int)
     panel_values = panel_values.str.replace("EN BANC", "", regex=False)
     author_values = author_values.str.replace("PER CURIAM", "", regex=False)
 
     # split the semicolon-delimited string into list of judges
     panel_extracted = panel_values.str.split("; ")
     author_extracted = author_values.str.split("; ")
-    
+
     # pull just the last name of each judge
     panel_extracted = panel_extracted.apply(_extract_last_names_from_list)
     author_extracted = author_extracted.apply(_extract_last_names_from_list)
-
 
     # pull the first 3 judges from each list (panel and author)
     df["panel_judge_1"] = panel_extracted.str[0].fillna("")
@@ -784,31 +797,25 @@ def clean_courtlistener_judges(df: pd.DataFrame) -> pd.DataFrame:
     judge_values = _standardize_judge_string(df["judge"])
 
     # normalize "and" variants (Oxford comma and bare "and")
-    judge_values = judge_values.str.replace(", AND ", ", ").str.replace(" AND ", ", ")
+    judge_values = judge_values.str.replace(", AND ",
+                                            ", ").str.replace(" AND ", ", ")
 
-    # drop data error 
+    # drop data error
     judge_values = judge_values.str.replace("VIRGINIA STRASSER (ARGUED)", "")
 
     # handle per curiam cases
     # (no "en banc" keywords identified in the judge strings)
-    df["cl_per_curiam"] = judge_values.str.contains("PER CURIAM", regex=False).astype(int)
+    df["cl_per_curiam"] = judge_values.str.contains("PER CURIAM",
+                                                    regex=False).astype(int)
     judge_values = judge_values.str.replace("PER CURIAM", "", regex=False)
 
     df["cl_judges"] = judge_values
 
     token_errors = {
-        "CIRCUIT JUDGE", "CIRCUIT JUDGES",
-        "CHIEF JUDGE", "CHIEF JUDGES",
-        "DISTRICT JUDGE", "DISTRICT JUDGES",
-        "SENIOR CIRCUIT JUDGE",
-        "SENIOR DISTRICT JUDGE",
-        "SENIOR JUDGE", 
-        "'SENIOR",
-        "CONCURRENC",
-        "CONCURRENCE",
-        "CONCURRENCES",
-        "SUPREME",
-        "DISSENT"
+        "CIRCUIT JUDGE", "CIRCUIT JUDGES", "CHIEF JUDGE", "CHIEF JUDGES",
+        "DISTRICT JUDGE", "DISTRICT JUDGES", "SENIOR CIRCUIT JUDGE",
+        "SENIOR DISTRICT JUDGE", "SENIOR JUDGE", "'SENIOR", "CONCURRENC",
+        "CONCURRENCE", "CONCURRENCES", "SUPREME", "DISSENT"
     }
     suffix_tokens = {"II", "III", "IV", "V", "JR", "SR"}
 
@@ -818,9 +825,9 @@ def clean_courtlistener_judges(df: pd.DataFrame) -> pd.DataFrame:
         tokens = [t.strip() for t in s.split(", ") if t.strip()]
         last_names = []
         for token in tokens:
-            if token in token_errors: # drop erroneous tokens 
+            if token in token_errors:  # drop erroneous tokens
                 continue
-            if token.replace(".", "") in suffix_tokens: # drop suffix tokens
+            if token.replace(".", "") in suffix_tokens:  # drop suffix tokens
                 continue
             last_name = _extract_last_name(token)
             if last_name:
@@ -835,12 +842,10 @@ def clean_courtlistener_judges(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def merge_cluster_metadata_w_llm_features(
-    cluster_metadata_path: str,
-    llm_outcomes_path: str,
-    llm_judges_path: str,
-    output_path: str
-) -> pd.DataFrame:
+def merge_cluster_metadata_w_llm_features(cluster_metadata_path: str,
+                                          llm_outcomes_path: str,
+                                          llm_judges_path: str,
+                                          output_path: str) -> pd.DataFrame:
     """
     Merge LLM-coded features (case outcomes and judges) with cluster metadata.
     
@@ -854,12 +859,17 @@ def merge_cluster_metadata_w_llm_features(
         Merged DataFrame with cluster metadata and LLM-extracted features (case outcomes and judge names)
     """
     print("\nMerging LLM-coded features with cluster metadata...")
-    cluster_df = pd.read_csv(cluster_metadata_path, dtype={"cluster_id": str, "lead_opinion_id": str})
+    cluster_df = pd.read_csv(cluster_metadata_path,
+                             dtype={
+                                 "cluster_id": str,
+                                 "lead_opinion_id": str
+                             })
     llm_outcomes_df = pd.read_csv(llm_outcomes_path, dtype={"opinion_id": str})
-    llm_outcomes_df = llm_outcomes_df.rename(columns={"model_id": "outcomes_model_id"})
+    llm_outcomes_df = llm_outcomes_df.rename(
+        columns={"model_id": "outcomes_model_id"})
     judges_df = pd.read_csv(llm_judges_path, dtype={"opinion_id": str})
     judges_df = judges_df.rename(columns={"model_id": "judges_model_id"})
-    
+
     # Merge cluster metadata to LLM-extracted features using lead_opinion_id from cluster metadata
     merged_df = cluster_df.merge(
         llm_outcomes_df,
@@ -867,30 +877,38 @@ def merge_cluster_metadata_w_llm_features(
         right_on="opinion_id",
         how="left",
     )
-    merged_df = merged_df.drop(columns=["opinion_id"]) # duplicate of lead_opinion_id
+    merged_df = merged_df.drop(columns=["opinion_id"
+                                        ])  # duplicate of lead_opinion_id
     merged_df = merged_df.merge(
         judges_df,
         left_on="lead_opinion_id",
         right_on="opinion_id",
         how="left",
     )
-    merged_df = merged_df.drop(columns=["opinion_id"]) # duplicate of lead_opinion_id
-    
+    merged_df = merged_df.drop(columns=["opinion_id"
+                                        ])  # duplicate of lead_opinion_id
+
     # Save merged data
     output_path_obj = Path(output_path)
     output_path_obj.parent.mkdir(parents=True, exist_ok=True)
-    merged_df.to_csv(output_path_obj, index=False, quoting=csv.QUOTE_NONNUMERIC)
+    merged_df.to_csv(output_path_obj,
+                     index=False,
+                     quoting=csv.QUOTE_NONNUMERIC)
     print(f"Saved merged data to {output_path_obj}")
-    
+
     # Print summary statistics
     total_clusters = len(merged_df)
 
     clusters_with_outcomes = merged_df["prevailing_score"].notna().sum()
     print(f"Total clusters: {total_clusters}")
-    print(f"Clusters with LLM outcomes: {clusters_with_outcomes} ({clusters_with_outcomes/total_clusters*100:.1f}%)")
+    print(
+        f"Clusters with LLM outcomes: {clusters_with_outcomes} ({clusters_with_outcomes/total_clusters*100:.1f}%)"
+    )
 
     clusters_with_judges = merged_df["panel_judges"].notna().sum()
-    print(f"Clusters with LLM judges: {clusters_with_judges} ({clusters_with_judges/total_clusters*100:.1f}%)")
+    print(
+        f"Clusters with LLM judges: {clusters_with_judges} ({clusters_with_judges/total_clusters*100:.1f}%)"
+    )
 
     return merged_df
 
@@ -898,9 +916,13 @@ def merge_cluster_metadata_w_llm_features(
 def clean_courtlistener_clusters_main():
     # Find the most recent run directory
     # TODO: maybe move this to separate function or pass as parameter
-    run_dirs = sorted([d for d in COURTLISTENER_RAW_DIR.iterdir() if d.is_dir() and d.name.startswith('run_')])
+    run_dirs = sorted([
+        d for d in COURTLISTENER_RAW_DIR.iterdir()
+        if d.is_dir() and d.name.startswith('run_')
+    ])
     if not run_dirs:
-        raise FileNotFoundError(f"No run directories found in {COURTLISTENER_RAW_DIR}")
+        raise FileNotFoundError(
+            f"No run directories found in {COURTLISTENER_RAW_DIR}")
 
     latest_run_dir = run_dirs[-1]
     print(f"Using run directory: {latest_run_dir.name}")
@@ -909,22 +931,20 @@ def clean_courtlistener_clusters_main():
     opinion_metadata_path = latest_run_dir / "opinion_metadata.csv"
 
     # Clean the data
-    clean_cluster_metadata(
-        cluster_metadata_path=str(cluster_metadata_path),
-        opinion_metadata_path=str(opinion_metadata_path),
-        output_path=str(COURTLISTENER_CLUSTER_CLEANED_PATH)
-    )
+    clean_cluster_metadata(cluster_metadata_path=str(cluster_metadata_path),
+                           opinion_metadata_path=str(opinion_metadata_path),
+                           output_path=str(COURTLISTENER_CLUSTER_CLEANED_PATH))
 
-    clean_llm_outcomes() # save a copy of the LLM-coded outcomes and adds a column for prevailing party 
-    clean_llm_judges() # save a cleaned copy of LLM-coded judges data
+    clean_llm_outcomes(
+    )  # save a copy of the LLM-coded outcomes and adds a column for prevailing party
+    clean_llm_judges()  # save a cleaned copy of LLM-coded judges data
 
     # Merge LLM-coded outcomes and judges with cluster metadata
     merge_cluster_metadata_w_llm_features(
         cluster_metadata_path=str(COURTLISTENER_CLUSTER_CLEANED_PATH),
         llm_outcomes_path=str(LLM_OPINION_CLF_PATH),
         llm_judges_path=str(LLM_JUDGES_CLF_PATH),
-        output_path=str(COURTLISTENER_METADATA_W_FTRS_PATH)
-    )
+        output_path=str(COURTLISTENER_METADATA_W_FTRS_PATH))
 
     print("Done!")
 
@@ -959,7 +979,8 @@ def get_docket_set(row, docket_cols=None):
     for col in docket_cols:
         if col in row.index:
             docket = row[col]
-            if pd.notna(docket) and str(docket).strip() and str(docket).strip().upper() != 'NAN':
+            if pd.notna(docket) and str(docket).strip() and str(
+                    docket).strip().upper() != 'NAN':
                 dockets.add(str(docket).strip().upper())
     return dockets
 
@@ -981,16 +1002,19 @@ def compute_all_matches(cl_df, ag_df):
     """
     # Verify court_id column exists
     if 'court_id' not in cl_df.columns:
-        raise ValueError("court_id column not found in CourtListener dataframe")
+        raise ValueError(
+            "court_id column not found in CourtListener dataframe")
     if 'court_id' not in ag_df.columns:
         raise ValueError("court_id column not found in AdelGlicks dataframe")
 
     # Extract docket sets for each row
     print("Extracting docket number sets...")
-    cl_docket_sets = cl_df.apply(lambda row: get_docket_set(row), axis=1)  # pd.Series
+    cl_docket_sets = cl_df.apply(lambda row: get_docket_set(row),
+                                 axis=1)  # pd.Series
 
     ag_docket_cols = ['docket_no1', 'docket_no2', 'docket_no3']
-    ag_docket_sets = ag_df.apply(lambda row: get_docket_set(row, ag_docket_cols), axis=1)
+    ag_docket_sets = ag_df.apply(
+        lambda row: get_docket_set(row, ag_docket_cols), axis=1)
 
     matches = []
 
@@ -1019,32 +1043,43 @@ def compute_all_matches(cl_df, ag_df):
                 overlap = cl_dockets.intersection(ag_dockets)
                 if overlap:
                     matches.append({
-                        'cluster_id': cl_df.loc[cl_idx, 'cluster_id'],
-                        'adelglicks_id': ag_df.loc[ag_idx, 'id_num'],
-                        'court_id': cl_df.loc[cl_idx, 'court_id'],
-                        'CL_year_filed': cl_df.loc[cl_idx, 'year_filed'],
-                        'AG_year_filed': ag_df.loc[ag_idx, 'year_filed'],
-                        'CL_AG_year_match': (
-                            cl_df.loc[cl_idx, 'year_filed']
-                            == ag_df.loc[ag_idx, 'year_filed']
-                        ),
-                        'year_filed_diff': (
-                            cl_df.loc[cl_idx, 'year_filed']
-                            - ag_df.loc[ag_idx, 'year_filed']
-                        ),
-                        'CL_docket_count': len(cl_dockets),
-                        'AG_docket_count': len(ag_dockets),
-                        'overlap_count': len(overlap),
-                        'CL_dockets': "; ".join(sorted(cl_dockets)),
-                        'AG_dockets': "; ".join(sorted(ag_dockets)),
-                        'overlapping_dockets': "; ".join(sorted(overlap)),
-                        'AG_has_outcome': (
-                            pd.notna(ag_df.loc[ag_idx, 'district_outcome'])
-                            and pd.notna(ag_df.loc[ag_idx, 'disposition'])
-                        ),
-                        'is_perfect_match': cl_dockets == ag_dockets,
-                        'CL_subset_of_AG': cl_dockets.issubset(ag_dockets),
-                        'AG_subset_of_CL': ag_dockets.issubset(cl_dockets),
+                        'cluster_id':
+                        cl_df.loc[cl_idx, 'cluster_id'],
+                        'adelglicks_id':
+                        ag_df.loc[ag_idx, 'id_num'],
+                        'court_id':
+                        cl_df.loc[cl_idx, 'court_id'],
+                        'CL_year_filed':
+                        cl_df.loc[cl_idx, 'year_filed'],
+                        'AG_year_filed':
+                        ag_df.loc[ag_idx, 'year_filed'],
+                        'CL_AG_year_match':
+                        (cl_df.loc[cl_idx,
+                                   'year_filed'] == ag_df.loc[ag_idx,
+                                                              'year_filed']),
+                        'year_filed_diff': (cl_df.loc[cl_idx, 'year_filed'] -
+                                            ag_df.loc[ag_idx, 'year_filed']),
+                        'CL_docket_count':
+                        len(cl_dockets),
+                        'AG_docket_count':
+                        len(ag_dockets),
+                        'overlap_count':
+                        len(overlap),
+                        'CL_dockets':
+                        "; ".join(sorted(cl_dockets)),
+                        'AG_dockets':
+                        "; ".join(sorted(ag_dockets)),
+                        'overlapping_dockets':
+                        "; ".join(sorted(overlap)),
+                        'AG_has_outcome':
+                        (pd.notna(ag_df.loc[ag_idx, 'district_outcome'])
+                         and pd.notna(ag_df.loc[ag_idx, 'disposition'])),
+                        'is_perfect_match':
+                        cl_dockets == ag_dockets,
+                        'CL_subset_of_AG':
+                        cl_dockets.issubset(ag_dockets),
+                        'AG_subset_of_CL':
+                        ag_dockets.issubset(cl_dockets),
                     })
 
     matches_df = pd.DataFrame(matches) if matches else pd.DataFrame()
@@ -1070,16 +1105,15 @@ def find_cases_with_multiple_matches(matches_df):
     cl_counts = matches_df.groupby('cluster_id').size()
     ag_counts = matches_df.groupby('adelglicks_id').size()
     matches_df['CL_has_multiple_matches'] = matches_df['cluster_id'].map(
-        cl_counts.gt(1)
-    ).fillna(False)
+        cl_counts.gt(1)).fillna(False)
     matches_df['AG_has_multiple_matches'] = matches_df['adelglicks_id'].map(
-        ag_counts.gt(1)
-    ).fillna(False)
+        ag_counts.gt(1)).fillna(False)
 
     return matches_df
 
 
-def compute_match_statistics(cl_df, ag_df, matches_df, cl_docket_sets, ag_docket_sets):
+def compute_match_statistics(cl_df, ag_df, matches_df, cl_docket_sets,
+                             ag_docket_sets):
     """
     Compute statistics on docket number matches.
 
@@ -1102,8 +1136,10 @@ def compute_match_statistics(cl_df, ag_df, matches_df, cl_docket_sets, ag_docket
         stats['perfect_matches'] = matches_df['is_perfect_match'].sum()
         stats['cl_subset_of_ag'] = matches_df['CL_subset_of_AG'].sum()
         stats['ag_subset_of_cl'] = matches_df['AG_subset_of_CL'].sum()
-        stats['cl_strict_subset_of_ag'] = stats['cl_subset_of_ag'] - stats['perfect_matches']
-        stats['ag_strict_subset_of_cl'] = stats['ag_subset_of_cl'] - stats['perfect_matches']
+        stats['cl_strict_subset_of_ag'] = stats['cl_subset_of_ag'] - stats[
+            'perfect_matches']
+        stats['ag_strict_subset_of_cl'] = stats['ag_subset_of_cl'] - stats[
+            'perfect_matches']
 
         # Multiple match statistics
         cl_match_counts = matches_df.groupby('cluster_id').size()
@@ -1112,19 +1148,20 @@ def compute_match_statistics(cl_df, ag_df, matches_df, cl_docket_sets, ag_docket
         stats['ag_cases_with_multiple_matches'] = (ag_match_counts > 1).sum()
 
         # Perfect matches that also have multiple matches
-        cl_perfect_any = matches_df[matches_df['is_perfect_match']].groupby('cluster_id').size()
-        ag_perfect_any = matches_df[matches_df['is_perfect_match']].groupby('adelglicks_id').size()
+        cl_perfect_any = matches_df[matches_df['is_perfect_match']].groupby(
+            'cluster_id').size()
+        ag_perfect_any = matches_df[matches_df['is_perfect_match']].groupby(
+            'adelglicks_id').size()
         stats['cl_cases_perfect_and_multiple'] = (
             cl_perfect_any.reindex(cl_match_counts.index, fill_value=0).gt(0)
-            & cl_match_counts.gt(1)
-        ).sum()
+            & cl_match_counts.gt(1)).sum()
         stats['ag_cases_perfect_and_multiple'] = (
             ag_perfect_any.reindex(ag_match_counts.index, fill_value=0).gt(0)
-            & ag_match_counts.gt(1)
-        ).sum()
+            & ag_match_counts.gt(1)).sum()
 
         # Overlap count distribution
-        stats['overlap_distribution'] = matches_df['overlap_count'].value_counts().to_dict()
+        stats['overlap_distribution'] = matches_df[
+            'overlap_count'].value_counts().to_dict()
 
         # Match quality breakdown
         stats['match_quality'] = {
@@ -1154,8 +1191,10 @@ def compute_match_statistics(cl_df, ag_df, matches_df, cl_docket_sets, ag_docket
     stats['total_ag_cases'] = len(ag_df)
     stats['cl_cases_with_dockets'] = (cl_docket_sets.apply(len) > 0).sum()
     stats['ag_cases_with_dockets'] = (ag_docket_sets.apply(len) > 0).sum()
-    stats['cl_cases_unmatched'] = stats['total_cl_cases'] - stats['unique_cl_matched']
-    stats['ag_cases_unmatched'] = stats['total_ag_cases'] - stats['unique_ag_matched']
+    stats['cl_cases_unmatched'] = stats['total_cl_cases'] - stats[
+        'unique_cl_matched']
+    stats['ag_cases_unmatched'] = stats['total_ag_cases'] - stats[
+        'unique_ag_matched']
 
     return stats
 
@@ -1163,9 +1202,9 @@ def compute_match_statistics(cl_df, ag_df, matches_df, cl_docket_sets, ag_docket
 def _format_merge_statistics(stats):
     """Format match statistics in a readable format."""
     lines = []
-    lines.append("\n" + "="*60)
+    lines.append("\n" + "=" * 60)
     lines.append("DOCKET NUMBER MATCH STATISTICS")
-    lines.append("="*60)
+    lines.append("=" * 60)
 
     lines.append("\nDataset Overview:")
     lines.append(f"  CourtListener cases: {stats['total_cl_cases']}")
@@ -1173,27 +1212,49 @@ def _format_merge_statistics(stats):
 
     lines.append("\nMatch Overview:")
     lines.append(f"  Total matches found: {stats['total_matches']}")
-    lines.append(f"  Unique CourtListener cases matched: {stats['unique_cl_matched']}")
-    lines.append(f"  Unique AdelGlicks cases matched: {stats['unique_ag_matched']}")
-    lines.append(f"  CourtListener cases unmatched: {stats['cl_cases_unmatched']}")
-    lines.append(f"  AdelGlicks cases unmatched: {stats['ag_cases_unmatched']}")
+    lines.append(
+        f"  Unique CourtListener cases matched: {stats['unique_cl_matched']}")
+    lines.append(
+        f"  Unique AdelGlicks cases matched: {stats['unique_ag_matched']}")
+    lines.append(
+        f"  CourtListener cases unmatched: {stats['cl_cases_unmatched']}")
+    lines.append(
+        f"  AdelGlicks cases unmatched: {stats['ag_cases_unmatched']}")
 
     if stats['total_matches'] > 0:
         lines.append("\nMultiple Match Statistics:")
-        lines.append(f"  CL cases with multiple matches: {stats['cl_cases_with_multiple_matches']}")
-        lines.append(f"  AG cases with multiple matches: {stats['ag_cases_with_multiple_matches']}")
-        lines.append(f"  CL cases perfect + multiple: {stats['cl_cases_perfect_and_multiple']}")
-        lines.append(f"  AG cases perfect + multiple: {stats['ag_cases_perfect_and_multiple']}")
+        lines.append(
+            f"  CL cases with multiple matches: {stats['cl_cases_with_multiple_matches']}"
+        )
+        lines.append(
+            f"  AG cases with multiple matches: {stats['ag_cases_with_multiple_matches']}"
+        )
+        lines.append(
+            f"  CL cases perfect + multiple: {stats['cl_cases_perfect_and_multiple']}"
+        )
+        lines.append(
+            f"  AG cases perfect + multiple: {stats['ag_cases_perfect_and_multiple']}"
+        )
 
         lines.append("\nMatch Quality:")
-        lines.append(f"  Perfect matches (identical docket sets): {stats['match_quality'].get('perfect', 0)}")
-        lines.append(f"  CL strict subset of AG (all CL dockets in AG): {stats['match_quality'].get('cl_strict_subset', 0)}")
-        lines.append(f"  AG strict subset of CL (all AG dockets in CL): {stats['match_quality'].get('ag_strict_subset', 0)}")
-        lines.append(f"  Partial matches (some overlap): {stats['match_quality'].get('partial', 0)}")
+        lines.append(
+            f"  Perfect matches (identical docket sets): {stats['match_quality'].get('perfect', 0)}"
+        )
+        lines.append(
+            f"  CL strict subset of AG (all CL dockets in AG): {stats['match_quality'].get('cl_strict_subset', 0)}"
+        )
+        lines.append(
+            f"  AG strict subset of CL (all AG dockets in CL): {stats['match_quality'].get('ag_strict_subset', 0)}"
+        )
+        lines.append(
+            f"  Partial matches (some overlap): {stats['match_quality'].get('partial', 0)}"
+        )
 
         lines.append("\nOverlap Count Distribution:")
-        for overlap_count, match_count in sorted(stats['overlap_distribution'].items()):
-            lines.append(f"  {overlap_count} docket(s) overlap: {match_count} matches")
+        for overlap_count, match_count in sorted(
+                stats['overlap_distribution'].items()):
+            lines.append(
+                f"  {overlap_count} docket(s) overlap: {match_count} matches")
 
     return "\n".join(lines)
 
@@ -1211,16 +1272,19 @@ def merge_cases_by_docket_main():
     ag_df = pd.read_csv(ADELGLICKS_CLEANED_PATH)
 
     # Compute all matches
-    matches_df, cl_docket_sets, ag_docket_sets = compute_all_matches(cl_df, ag_df)
+    matches_df, cl_docket_sets, ag_docket_sets = compute_all_matches(
+        cl_df, ag_df)
     matches_df = find_cases_with_multiple_matches(matches_df)
 
     # Compute statistics
-    stats = compute_match_statistics(cl_df, ag_df, matches_df, cl_docket_sets, ag_docket_sets)
+    stats = compute_match_statistics(cl_df, ag_df, matches_df, cl_docket_sets,
+                                     ag_docket_sets)
 
     # Print statistics and save to text file
     stats_output = _print_merge_statistics(stats)
     COURTLISTENER_AG_MATCH_STATS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    COURTLISTENER_AG_MATCH_STATS_PATH.write_text(stats_output, encoding="utf-8")
+    COURTLISTENER_AG_MATCH_STATS_PATH.write_text(stats_output,
+                                                 encoding="utf-8")
 
     # Save match data to CSV
     output_path = COURTLISTENER_AG_MATCHING_PATH
@@ -1231,8 +1295,9 @@ def merge_cases_by_docket_main():
 
 
 # ------------------------------------------------------------------------------
-# train/test/val split assignments 
+# train/test/val split assignments
 # ------------------------------------------------------------------------------
+
 
 def assign_val_test_split(
     matches_df: pd.DataFrame,
@@ -1250,9 +1315,9 @@ def assign_val_test_split(
     Returns:
         DataFrame with split assignments in split_col.
     """
-    # Note: the sklearn function can do this slightly more elegantly, *except* 
-    # in the case where a group has only a single case, in which case it 
-    # crashes. hence we are just doing this manually here. 
+    # Note: the sklearn function can do this slightly more elegantly, *except*
+    # in the case where a group has only a single case, in which case it
+    # crashes. hence we are just doing this manually here.
     required_cols = {"is_perfect_match", "AG_has_outcome", "court_id"}
     missing = required_cols - set(matches_df.columns)
     if missing:
@@ -1325,8 +1390,8 @@ def save_cl_train_split(matches_df):
     train_matches = matches_df[~matches_df["cluster_id"].isin(exclude_ids)]
     train_matches.loc[:, "dataset_split"] = "train"
 
-    unmatched_cl = cl_df[~cl_df["cluster_id"].isin(
-        matches_df["cluster_id"])].copy()
+    unmatched_cl = cl_df[~cl_df["cluster_id"].isin(matches_df["cluster_id"]
+                                                   )].copy()
     unmatched_cl = unmatched_cl[~unmatched_cl["cluster_id"].isin(exclude_ids)]
 
     # Build rows with same columns as matches_df
@@ -1337,8 +1402,8 @@ def save_cl_train_split(matches_df):
     cl_train_unmatched["CL_year_filed"] = unmatched_cl["year_filed"]
     cl_train_unmatched["dataset_split"] = "train"
 
-    cl_train_df = pd.concat(
-        [train_matches, cl_train_unmatched], ignore_index=True)
+    cl_train_df = pd.concat([train_matches, cl_train_unmatched],
+                            ignore_index=True)
 
     # Save output
     CL_TRAIN_ASSIGNMENTS_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -1351,8 +1416,8 @@ def assign_val_test_split_main():
     matches_df = assign_val_test_split(matches_df)
 
     # Save outputs
-    COURTLISTENER_AG_MATCHING_SPLIT_PATH.parent.mkdir(
-        parents=True, exist_ok=True)
+    COURTLISTENER_AG_MATCHING_SPLIT_PATH.parent.mkdir(parents=True,
+                                                      exist_ok=True)
     matches_df.to_csv(COURTLISTENER_AG_MATCHING_SPLIT_PATH, index=False)
     print(f"\nSaved split data to: {COURTLISTENER_AG_MATCHING_SPLIT_PATH}")
 
@@ -1374,15 +1439,22 @@ def merge_cl_train_w_llm_features(
         DataFrame with merged train data and predictions
     """
     # Load data
-    train_assignments = pd.read_csv(train_assignments_path, dtype={"cluster_id": str}) 
-    cl_df = pd.read_csv(COURTLISTENER_CLUSTER_CLEANED_PATH, dtype={"cluster_id": str, "lead_opinion_id": str})
-    pred_outcomes_df = pd.read_csv(LLM_OPINION_CLF_PATH, dtype={"opinion_id": str})
-    pred_outcomes_df = pred_outcomes_df.rename(columns={"model_id": "outcomes_model_id"})
+    train_assignments = pd.read_csv(train_assignments_path,
+                                    dtype={"cluster_id": str})
+    cl_df = pd.read_csv(COURTLISTENER_CLUSTER_CLEANED_PATH,
+                        dtype={
+                            "cluster_id": str,
+                            "lead_opinion_id": str
+                        })
+    pred_outcomes_df = pd.read_csv(LLM_OPINION_CLF_PATH,
+                                   dtype={"opinion_id": str})
+    pred_outcomes_df = pred_outcomes_df.rename(
+        columns={"model_id": "outcomes_model_id"})
     pred_outcomes_df = infer_prevailing_party(pred_outcomes_df)
 
     judges_df = pd.read_csv(LLM_JUDGES_CLF_PATH, dtype={"opinion_id": str})
     judges_df = judges_df.rename(columns={"model_id": "judges_model_id"})
-    
+
     # Validate required columns
     assert "lead_opinion_id" in cl_df.columns, "lead_opinion_id missing from CourtListener cluster metadata"
     assert "opinion_id" in pred_outcomes_df.columns, "opinion_id missing from LLM coded outcomes"
@@ -1394,7 +1466,7 @@ def merge_cl_train_w_llm_features(
         on="cluster_id",
         how="left",
     )
-    
+
     # Merge with LLM-extracted features (case outcomes and judges)
     merged = merged.merge(
         pred_outcomes_df,
@@ -1402,41 +1474,47 @@ def merge_cl_train_w_llm_features(
         right_on="opinion_id",
         how="left",
     )
-    merged = merged.drop(columns=["opinion_id"]) # duplicate of lead_opinion_id
+    merged = merged.drop(columns=["opinion_id"
+                                  ])  # duplicate of lead_opinion_id
     merged = merged.merge(
         judges_df,
         left_on="lead_opinion_id",
         right_on="opinion_id",
         how="left",
     )
-    merged = merged.drop(columns=["opinion_id"]) # duplicate of lead_opinion_id
-    
-    merged = merged.rename(columns={
-        "district_outcome": "district_outcome_pred",
-        "disposition": "disposition_pred"
-    })
+    merged = merged.drop(columns=["opinion_id"
+                                  ])  # duplicate of lead_opinion_id
+
+    merged = merged.rename(
+        columns={
+            "district_outcome": "district_outcome_pred",
+            "disposition": "disposition_pred"
+        })
 
     # Save output
     output_path.parent.mkdir(parents=True, exist_ok=True)
     merged.to_csv(output_path, index=False)
     print(f"Saved merged CL train predictions to: {output_path}")
-    
+
     # Print summary statistics
     total_cases = len(merged)
 
     cases_with_predictions = merged["district_outcome_pred"].notna().sum()
     print(f"Total train cases: {total_cases}")
-    print(f"Cases with predictions: {cases_with_predictions} ({cases_with_predictions/total_cases*100:.1f}%)")
+    print(
+        f"Cases with predictions: {cases_with_predictions} ({cases_with_predictions/total_cases*100:.1f}%)"
+    )
 
     cases_with_judges = merged["panel_judges"].notna().sum()
-    print(f"Cases with judges: {cases_with_judges} ({cases_with_judges/total_cases*100:.1f}%)")
-    
+    print(
+        f"Cases with judges: {cases_with_judges} ({cases_with_judges/total_cases*100:.1f}%)"
+    )
+
     return merged
 
 
 def flip_district_outcome(
-    input_path: Path = LLM_OPINION_CLF_RAW_PATH,
-) -> pd.DataFrame:
+    input_path: Path = LLM_OPINION_CLF_RAW_PATH, ) -> pd.DataFrame:
     """
     Flip district_outcome values in LLM opinion coding CSV.
     
@@ -1452,37 +1530,41 @@ def flip_district_outcome(
     # print(f"Loading LLM opinion coding from {input_path}...")
     df = pd.read_csv(input_path)
     assert "district_outcome" in df.columns, "district_outcome column not found in input CSV"
-    
+
     # Flip district_outcome values
     print("Flipping district_outcome values...")
     df["district_outcome"] = df["district_outcome"].map({
-        "defendant": "plaintiff",
-        "plaintiff": "defendant",
-    }).fillna(df["district_outcome"])  # Keep original value if not in mapping (e.g., "mixed", "UNK", NaN)
-    
+        "defendant":
+        "plaintiff",
+        "plaintiff":
+        "defendant",
+    }).fillna(
+        df["district_outcome"]
+    )  # Keep original value if not in mapping (e.g., "mixed", "UNK", NaN)
+
     # Save output
     input_path_obj = Path(input_path)
     output_path = input_path_obj.parent / f"{input_path_obj.stem}_district_flipped{input_path_obj.suffix}"
-    
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(output_path, index=False)
     print(f"Saved flipped district_outcome data to: {output_path}")
-    
+
     return df
 
 
-
 # ------------------------------------------------------------------------------
+
 
 def main():
     clean_adelglicks_main()
     clean_courtlistener_clusters_main()
     merge_cases_by_docket_main()
     assign_val_test_split_main()
-    # flip_district_outcome() # temporary workaround because it seems like the LLM coded everything the opposite way 
-    merge_cl_train_w_llm_features() # saves a copy of courtlistener data excluded from the val/test sets and merges with predictions 
+    # flip_district_outcome() # temporary workaround because it seems like the LLM coded everything the opposite way
+    merge_cl_train_w_llm_features(
+    )  # saves a copy of courtlistener data excluded from the val/test sets and merges with predictions
 
 
 if __name__ == "__main__":
     main()
-

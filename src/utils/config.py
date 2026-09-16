@@ -8,7 +8,12 @@ from pathlib import Path
 from datetime import datetime
 
 ################################################################################
-# SET CODE LOCATION -----------------------------------------------------------
+# MANUAL SETTINGS
+
+_GEMINI_RUN_ID = "run_20260910_184612_gemini_20260914_114005"
+
+################################################################################
+# AUTO-SET REMAINING FILE PATHS
 
 _user = getpass.getuser()
 
@@ -69,10 +74,11 @@ CL_TRAIN_ASSIGNMENTS_PATH = FTR_ASSIGNMENTS_DIR / "CL_train.csv"
 FTR_PREDICTIONS_DIR = INTERMEDIATE_DATA_DIR / "Feature Classification Predictions"
 CL_TRAIN_PREDICTIONS_PATH = FTR_PREDICTIONS_DIR / "CL_train_predictions.csv"
 
-LLM_OPINION_CLF_RAW_PATH = INTERMEDIATE_DATA_DIR / "gemini_output/opinions_20251219_110552_coding_20260102_165440/opinions_20251219_110552_coding_20260102_165440.csv"
+# TODO: merge the gemini output paths
+LLM_OPINION_CLF_RAW_PATH = INTERMEDIATE_DATA_DIR / "gemini_output" / _GEMINI_RUN_ID / f"{_GEMINI_RUN_ID}.csv"
 LLM_OPINION_CLF_PATH = FTR_PREDICTIONS_DIR / "LLM_case_outcome_coding.csv"
 
-LLM_JUDGES_CLF_RAW_PATH = INTERMEDIATE_DATA_DIR / "gemini_output/opinions_20251219_110552_judges_20260429_111513/opinions_20251219_110552_judges_20260429_111513.csv"
+LLM_JUDGES_CLF_RAW_PATH = INTERMEDIATE_DATA_DIR / "gemini_output" / _GEMINI_RUN_ID / f"{_GEMINI_RUN_ID}.csv"
 LLM_JUDGES_CLF_PATH = FTR_PREDICTIONS_DIR / "LLM_judge_coding.csv"
 
 COURTLISTENER_METADATA_W_FTRS_PATH = FTR_PREDICTIONS_DIR / "courtlistener_metadata_w_extracted_features.csv"
