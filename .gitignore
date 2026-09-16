@@ -15,6 +15,9 @@ desktop.ini
 # random Mac files 
 .DS_Store
 
+# Hannah random files 
+src/deprecated/*
+
 # ------------------------------------------------------------------------------
 # Python .gitignore template 
 
