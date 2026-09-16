@@ -31,32 +31,34 @@ def main():
     """
     print(f"Loading data from: {LLM_OPINION_CLF_PATH}")
     df = pd.read_csv(LLM_OPINION_CLF_PATH, dtype={"opinion_id": str})
-    
+
     print(f"\nTotal observations: {len(df)}")
     print(f"\nColumns: {', '.join(df.columns.tolist())}")
-    
+
     # Variables to compute frequencies for
     categorical_vars = ["district_outcome", "disposition", "prevailing_party"]
-    
+
     # Check which variables exist in the dataframe
     available_vars = [var for var in categorical_vars if var in df.columns]
     missing_vars = [var for var in categorical_vars if var not in df.columns]
-    
+
     if missing_vars:
-        print(f"\nWarning: The following variables were not found in the data: {', '.join(missing_vars)}")
-    
+        print(
+            f"\nWarning: The following variables were not found in the data: {', '.join(missing_vars)}"
+        )
+
     # Compute and print frequency counts for each variable
     results = {}
     for var in available_vars:
         counts = compute_frequency_counts(df, var)
         results[var] = counts
-    
+
     # Save results to CSV
     output_dir = INTERMEDIATE_DATA_DIR / "Summary Statistics"
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     output_path = output_dir / "llm_opinion_coding_frequencies.csv"
-    
+
     # Combine all results into a single dataframe for saving
     summary_rows = []
     for var, counts in results.items():
@@ -68,14 +70,13 @@ def main():
                 "count": count,
                 "percentage": percentage
             })
-    
+
     summary_df = pd.DataFrame(summary_rows)
     summary_df.to_csv(output_path, index=False)
     print(f"\n\nSaved summary statistics to: {output_path}")
-    
+
     return summary_df
 
 
 if __name__ == "__main__":
     main()
-
