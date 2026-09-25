@@ -649,10 +649,10 @@ if $judgeIV_stage2 == 1 {
         using "${tabdir}/judgeIV_cost_regressions.tex", replace ///
         booktabs label se star(* 0.10 ** 0.05 *** 0.01) ///
         drop(_cons) ///
-        mtitles("$\textdollar$ / Mile" "$\textdollar$ / Mile" ///
+        mtitles("$\textdollar$/Mi" "$\textdollar$/Mi" ///
             "\shortstack{Adverse Rulings\\per 100k}" "\shortstack{Adverse Rulings\\per 100k (t-1)}" ///
-            "$\textdollar$ per Mile" "$\textdollar$ per Mile" ///
-            "$\textdollar$ per Mile" "$\textdollar$ per Mile") ///
+            "$\textdollar$/Mi" "$\textdollar$/Mi" ///
+            "$\textdollar$/Mi" "$\textdollar$/Mi") ///
         mgroups("OLS" "First Stage" "2SLS (ivreg2)" "2SLS (ivregress)", pattern(1 0 1 0 1 0 1 0) span ///
             prefix(\multicolumn{2}{c}{) suffix(})) ///
         indicate("Year FE = *.year" "Circuit FE = *.court_id_code", labels("X" "")) ///
@@ -760,9 +760,9 @@ if $judgeIV_6yr == 1 {
         using "${tabdir}/judgeIV_cost_regressions_6yr.tex", replace ///
         booktabs label se star(* 0.10 ** 0.05 *** 0.01) ///
         drop(_cons) ///
-        mtitles("$\textdollar$ / Mile" "$\textdollar$ / Mile" ///
+        mtitles("$\textdollar$/Mi" "$\textdollar$/Mi" ///
             "\shortstack{Adverse Rulings\\per 100k}" "\shortstack{Adverse Rulings\\per 100k (t-1)}" ///
-            "$\textdollar$ per Mile" "$\textdollar$ per Mile") ///
+            "$\textdollar$/Mi" "$\textdollar$/Mi") ///
         mgroups("OLS" "First Stage" "IV (2SLS)", pattern(1 0 1 0 1 0) span ///
             prefix(\multicolumn{2}{c}{) suffix(})) ///
         indicate("Period FE = *.period" "Circuit FE = *.court_id_code", labels("X" "")) ///
