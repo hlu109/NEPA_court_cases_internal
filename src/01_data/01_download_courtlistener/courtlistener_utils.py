@@ -1,5 +1,5 @@
 """
-CourtListener Data Utilities 
+Helper functions for downloading CourtListener data
 """
 
 import sys
