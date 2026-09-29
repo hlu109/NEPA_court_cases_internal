@@ -16,7 +16,7 @@ sys.path.insert(0, str(project_root))
 from utils.config import (COURTLISTENER_CLUSTER_CLEANED_PATH,
                           LLM_OPINION_RAW_PATH, LLM_OPINION_PATH,
                           LLM_JUDGES_PATH, COURTLISTENER_METADATA_W_FTRS_PATH,
-                          USGOV_PL_PATH)
+                          USGOV_PL_PATH, JUDGESHIPS_CLEAN_PATH)
 from utils.case_cleaning_utils import (normalize_dash_characters,
                                        infer_prevailing_party,
                                        get_latest_courtlistener_run)
@@ -485,6 +485,31 @@ def merge_cluster_metadata_w_llm_features(cluster_metadata_path: str,
     )
     merged_df = merged_df.drop(columns=["opinion_id"
                                         ])  # duplicate of lead_opinion_id
+
+    # merge FJC full names and characteristics onto each panel judge by judgeship (note party can differ across appointments hence using judgeship instead of judge data)
+    judgeships_df = pd.read_csv(JUDGESHIPS_CLEAN_PATH).set_index(
+        "judgeship_id")
+    for k in range(1, 4):  # merge full name
+        merged_df[f"panel_judge_full_name_{k}"] = merged_df[
+            f"panel_judgeship_id_{k}"].map(judgeships_df["name_full"])
+    # merge demographics
+    judge_chars = {
+        "rep": "char_rep",
+        "dem": "char_dem",
+        "female": "char_female",
+        "poc": "char_poc"
+    }
+    for demographic, col_name in judge_chars.items():
+        panel_cols = [f"panel_judge_{demographic}_{k}" for k in range(1, 4)]
+        for k, panel_col in enumerate(panel_cols, start=1):
+            merged_df[panel_col] = merged_df[f"panel_judgeship_id_{k}"].map(
+                judgeships_df[col_name])
+        # compute case-level counts and existence indicators of demographic vars (missing if not all 3 panel judges are present)
+        merged_df[f"count_{demographic}"] = merged_df[panel_cols].sum(
+            axis=1, min_count=3)
+        merged_df[f"has_{demographic}"] = (
+            merged_df[f"count_{demographic}"]
+            > 0).astype(float).where(merged_df[f"count_{demographic}"].notna())
 
     # Save merged data
     output_path_obj = Path(output_path)

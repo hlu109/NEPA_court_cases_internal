@@ -14,7 +14,7 @@ project_root = Path(__file__).parents[2]
 sys.path.insert(0, str(project_root))
 
 from utils.config import FJC_RAW_DIR, JUDGESHIPS_CLEAN_PATH
-from utils.judge_names import normalize_last_name
+from utils.judge_names import normalize_last_name, clean_name_string
 
 # indicator columns for race/ethnicity
 RACE_IND_COLS = [
@@ -124,6 +124,13 @@ def main():
         "race_raw": fjc_demographics["Race or Ethnicity"],
     })
 
+    # reconstruct full name for display purposes
+    name_parts = fjc_demographics[[
+        "First Name", "Middle Name", "Last Name", "Suffix"
+    ]].fillna("")
+    demo["name_full"] = name_parts.apply(" ".join,
+                                         axis=1).map(clean_name_string)
+
     # gender indicator
     has_gender = demo["gender"].isin(["Male", "Female"])
     demo["char_female"] = (
@@ -159,6 +166,11 @@ def main():
                 demo.at[i, col] = 1
     demo.loc[~has_race, RACE_IND_COLS] = np.nan
 
+    # indicator for person of color (note this includes people who are Hispanic/White, the FJC coding is ambiguous as to whether they are mixed race or if they are Spanish White)
+    demo["char_poc"] = demo[[
+        "char_black", "char_hispanic", "char_asian", "char_other_race"
+    ]].max(axis=1)
+
     # merge demographic data onto judgeships
     judgeships = judgeships.merge(demo, on="fjc_nid", how="left")
 
@@ -174,13 +186,13 @@ def main():
     id_cols = [
         "judgeship_id", "fjc_nid", "court_id", "court_type", "court_name",
         "appointment_seq", "name_first", "name_middle", "name_last",
-        "name_suffix", "date_service_start", "date_termination"
+        "name_suffix", "name_full", "date_service_start", "date_termination"
     ]
     party_cols = [
         "appointing_pres", "appointing_party", "appointer_inherited",
         "char_rep", "char_dem"
     ]
-    race_cols = ["race_raw"] + RACE_IND_COLS
+    race_cols = ["race_raw"] + RACE_IND_COLS + ["char_poc"]
     demo_cols = ["birth_year", "gender", "char_female"]
     judgeships = judgeships[id_cols + party_cols + race_cols + demo_cols]
 
