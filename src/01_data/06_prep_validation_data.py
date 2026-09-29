@@ -17,12 +17,11 @@ from utils.config import (
     COURTLISTENER_CLUSTER_CLEANED_PATH, COURTLISTENER_AG_MATCH_STATS_PATH,
     COURTLISTENER_AG_MATCHING_PATH, COURTLISTENER_AG_MATCHING_SPLIT_PATH,
     FTR_ASSIGNMENTS_DIR, AG_VAL_ASSIGNMENTS_PATH, AG_TEST_ASSIGNMENTS_PATH,
-    CL_TRAIN_ASSIGNMENTS_PATH, LLM_OPINION_CLF_RAW_PATH, LLM_OPINION_CLF_PATH,
-    LLM_JUDGES_CLF_PATH, CL_TRAIN_PREDICTIONS_PATH)
+    CL_TRAIN_ASSIGNMENTS_PATH, LLM_OPINION_RAW_PATH, LLM_OPINION_PATH,
+    LLM_JUDGES_PATH, CL_TRAIN_PREDICTIONS_PATH)
 from utils.case_cleaning_utils import (normalize_dash_characters,
-                                       standardize_judge_string,
-                                       extract_last_name,
                                        infer_prevailing_party)
+from utils.judge_names import parse_judge_name
 
 
 def clean_adelglicks_dockets(df: pd.DataFrame) -> pd.DataFrame:
@@ -124,15 +123,13 @@ def clean_adelglicks_judges(df: pd.DataFrame) -> pd.DataFrame:
             "judge_3": "panel_judge_3",
         })
 
-    # normalize
-    df["panel_judge_1"] = standardize_judge_string(df["panel_judge_1"])
-    df["panel_judge_2"] = standardize_judge_string(df["panel_judge_2"])
-    df["panel_judge_3"] = standardize_judge_string(df["panel_judge_3"])
-
     # extract last name
-    df["panel_judge_1"] = df["panel_judge_1"].apply(extract_last_name)
-    df["panel_judge_2"] = df["panel_judge_2"].apply(extract_last_name)
-    df["panel_judge_3"] = df["panel_judge_3"].apply(extract_last_name)
+    df["panel_judge_1"] = df["panel_judge_1"].map(
+        lambda x: parse_judge_name(x)["last"])
+    df["panel_judge_2"] = df["panel_judge_2"].map(
+        lambda x: parse_judge_name(x)["last"])
+    df["panel_judge_3"] = df["panel_judge_3"].map(
+        lambda x: parse_judge_name(x)["last"])
 
     return df
 
@@ -296,43 +293,27 @@ def compute_all_matches(cl_df, ag_df):
                 overlap = cl_dockets.intersection(ag_dockets)
                 if overlap:
                     matches.append({
-                        'cluster_id':
-                        cl_df.loc[cl_idx, 'cluster_id'],
-                        'adelglicks_id':
-                        ag_df.loc[ag_idx, 'id_num'],
-                        'court_id':
-                        cl_df.loc[cl_idx, 'court_id'],
-                        'CL_year_filed':
-                        cl_df.loc[cl_idx, 'year_filed'],
-                        'AG_year_filed':
-                        ag_df.loc[ag_idx, 'year_filed'],
-                        'CL_AG_year_match':
-                        (cl_df.loc[cl_idx,
-                                   'year_filed'] == ag_df.loc[ag_idx,
-                                                              'year_filed']),
+                        'cluster_id': cl_df.loc[cl_idx, 'cluster_id'],
+                        'adelglicks_id': ag_df.loc[ag_idx, 'id_num'],
+                        'court_id': cl_df.loc[cl_idx, 'court_id'],
+                        'CL_year_filed': cl_df.loc[cl_idx, 'year_filed'],
+                        'AG_year_filed': ag_df.loc[ag_idx, 'year_filed'],
+                        'CL_AG_year_match': (cl_df.loc[cl_idx, 'year_filed'] ==
+                                             ag_df.loc[ag_idx, 'year_filed']),
                         'year_filed_diff': (cl_df.loc[cl_idx, 'year_filed'] -
                                             ag_df.loc[ag_idx, 'year_filed']),
-                        'CL_docket_count':
-                        len(cl_dockets),
-                        'AG_docket_count':
-                        len(ag_dockets),
-                        'overlap_count':
-                        len(overlap),
-                        'CL_dockets':
-                        "; ".join(sorted(cl_dockets)),
-                        'AG_dockets':
-                        "; ".join(sorted(ag_dockets)),
-                        'overlapping_dockets':
-                        "; ".join(sorted(overlap)),
-                        'AG_has_outcome':
-                        (pd.notna(ag_df.loc[ag_idx, 'district_outcome'])
-                         and pd.notna(ag_df.loc[ag_idx, 'disposition'])),
-                        'is_perfect_match':
-                        cl_dockets == ag_dockets,
-                        'CL_subset_of_AG':
-                        cl_dockets.issubset(ag_dockets),
-                        'AG_subset_of_CL':
-                        ag_dockets.issubset(cl_dockets),
+                        'CL_docket_count': len(cl_dockets),
+                        'AG_docket_count': len(ag_dockets),
+                        'overlap_count': len(overlap),
+                        'CL_dockets': "; ".join(sorted(cl_dockets)),
+                        'AG_dockets': "; ".join(sorted(ag_dockets)),
+                        'overlapping_dockets': "; ".join(sorted(overlap)),
+                        'AG_has_outcome': (
+                            pd.notna(ag_df.loc[ag_idx, 'district_outcome'])
+                            and pd.notna(ag_df.loc[ag_idx, 'disposition'])),
+                        'is_perfect_match': cl_dockets == ag_dockets,
+                        'CL_subset_of_AG': cl_dockets.issubset(ag_dockets),
+                        'AG_subset_of_CL': ag_dockets.issubset(cl_dockets),
                     })
 
     matches_df = pd.DataFrame(matches) if matches else pd.DataFrame()
@@ -699,13 +680,12 @@ def merge_cl_train_w_llm_features(
                             "cluster_id": str,
                             "lead_opinion_id": str
                         })
-    pred_outcomes_df = pd.read_csv(LLM_OPINION_CLF_PATH,
-                                   dtype={"opinion_id": str})
+    pred_outcomes_df = pd.read_csv(LLM_OPINION_PATH, dtype={"opinion_id": str})
     pred_outcomes_df = pred_outcomes_df.rename(
         columns={"model_id": "outcomes_model_id"})
     pred_outcomes_df = infer_prevailing_party(pred_outcomes_df)
 
-    judges_df = pd.read_csv(LLM_JUDGES_CLF_PATH, dtype={"opinion_id": str})
+    judges_df = pd.read_csv(LLM_JUDGES_PATH, dtype={"opinion_id": str})
     judges_df = judges_df.rename(columns={"model_id": "judges_model_id"})
 
     # Validate required columns
@@ -767,7 +747,7 @@ def merge_cl_train_w_llm_features(
 
 
 def flip_district_outcome(
-    input_path: Path = LLM_OPINION_CLF_RAW_PATH, ) -> pd.DataFrame:
+    input_path: Path = LLM_OPINION_RAW_PATH, ) -> pd.DataFrame:
     """
     Flip district_outcome values in LLM opinion coding CSV.
     
@@ -787,10 +767,8 @@ def flip_district_outcome(
     # Flip district_outcome values
     print("Flipping district_outcome values...")
     df["district_outcome"] = df["district_outcome"].map({
-        "defendant":
-        "plaintiff",
-        "plaintiff":
-        "defendant",
+        "defendant": "plaintiff",
+        "plaintiff": "defendant",
     }).fillna(
         df["district_outcome"]
     )  # Keep original value if not in mapping (e.g., "mixed", "UNK", NaN)

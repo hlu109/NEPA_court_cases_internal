@@ -2,10 +2,9 @@
 Helper functions to clean court case data.
 """
 
-import re
 import pandas as pd
 
-from utils.config import USGOV_PL_PATH
+from utils.config import USGOV_PL_PATH, COURTLISTENER_RAW_DIR
 
 
 def normalize_dash_characters(text: str) -> str:
@@ -39,57 +38,6 @@ def normalize_dash_characters(text: str) -> str:
         text = text.replace(dash, '-')
 
     return text
-
-
-def standardize_judge_string(judge_series: pd.Series) -> pd.Series:
-    """ 
-    Standardize judge text.
-    """
-    judge_string = judge_series.fillna("").astype(str).str.strip().str.upper()
-    return judge_string
-
-
-def extract_last_name(name: str) -> str:
-    name = str(name).strip()
-    if not name:
-        return ""
-    suffixes = {"JR", "SR", "II", "III", "IV", "V"}
-    last_name = ""
-    # handle "last, first" format as well as "first middle last, suffix" format
-    if "," in name:
-        comma_parts = [part.strip() for part in name.split(",")]
-        # check if the second part matches a suffix (after dropping the period)
-        if len(comma_parts) > 1 and comma_parts[1].replace(
-                ".", "").upper() in suffixes:
-            tokens = [t for t in re.split(r"\s+", comma_parts[0]) if t]
-            last_name = tokens[-1] if tokens else ""
-        else:
-            last_name = comma_parts[0]
-    else:
-        # "first middle last" format
-        tokens = [t for t in re.split(r"\s+", name)
-                  if t]  # (first (middle) last) format
-        last_name = tokens[-1] if tokens else ""
-
-    # handle character encoding issues
-    # e.g. ALARCÃ“N -> ALARCÓN, DUHÃ‰ -> DUHÉ
-    last_name = last_name.replace("Ã“", "O")
-    last_name = last_name.replace("Ã‰", "E")
-
-    # remove any non-alphabetic characters, including apostrophes
-    # (apostrophes are also causing character encoding issues sometimes - easier to just remove them)
-    last_name = re.sub(r"[^A-Za-z]", "", last_name)
-
-    # manually correct typos
-    last_name = last_name.replace("TYMKOVCH", "TYMKOVICH")
-    if last_name == "SCANNLAIN":  # can't use .replace() since it also will match to substrings and turn "OSCANNLAIN" into "OOSCANNLAIN"
-        last_name = "OSCANNLAIN"
-
-    return last_name
-
-
-def extract_last_names_from_list(names):
-    return [extract_last_name(name) for name in names]
 
 
 def infer_prevailing_party(df: pd.DataFrame) -> pd.DataFrame:
@@ -164,25 +112,31 @@ def infer_prevailing_party(df: pd.DataFrame) -> pd.DataFrame:
     df.loc[flip_mask,
            "pro_dev_district_score"] = df.loc[flip_mask,
                                               "district_outcome"].map({
-                                                  "defendant":
-                                                  0,
-                                                  "plaintiff":
-                                                  1,
-                                                  "mixed":
-                                                  0.5,
-                                                  "UNK":
-                                                  None,
+                                                  "defendant": 0,
+                                                  "plaintiff": 1,
+                                                  "mixed": 0.5,
+                                                  "UNK": None,
                                               })
     df.loc[flip_mask,
            "pro_dev_prevailing_score"] = df.loc[flip_mask,
                                                 "prevailing_party"].map({
-                                                    "defendant":
-                                                    0,
-                                                    "plaintiff":
-                                                    1,
-                                                    "mixed":
-                                                    0.5,
-                                                    "UNK":
-                                                    None,
+                                                    "defendant": 0,
+                                                    "plaintiff": 1,
+                                                    "mixed": 0.5,
+                                                    "UNK": None,
                                                 })
     return df
+
+
+def get_latest_courtlistener_run():
+    """Returns the most recent CourtListener download folder (run_YYYYMMDD_HHMMSS) in COURTLISTENER_RAW_DIR."""
+    run_dirs = sorted([
+        d for d in COURTLISTENER_RAW_DIR.iterdir()
+        if d.is_dir() and d.name.startswith("run_")
+    ])
+    if not run_dirs:
+        raise FileNotFoundError(
+            f"No run directories found in {COURTLISTENER_RAW_DIR}")
+    latest_run_dir = run_dirs[-1]
+    print(f"Using CourtListener run: {latest_run_dir.name}")
+    return latest_run_dir

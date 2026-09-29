@@ -14,15 +14,13 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from utils.config import (COURTLISTENER_CLUSTER_CLEANED_PATH,
-                          COURTLISTENER_RAW_DIR, LLM_OPINION_CLF_RAW_PATH,
-                          LLM_OPINION_CLF_PATH, LLM_JUDGES_CLF_RAW_PATH,
-                          LLM_JUDGES_CLF_PATH,
-                          COURTLISTENER_METADATA_W_FTRS_PATH, USGOV_PL_PATH)
+                          LLM_OPINION_RAW_PATH, LLM_OPINION_PATH,
+                          LLM_JUDGES_PATH, COURTLISTENER_METADATA_W_FTRS_PATH,
+                          USGOV_PL_PATH)
 from utils.case_cleaning_utils import (normalize_dash_characters,
-                                       standardize_judge_string,
-                                       extract_last_name,
-                                       extract_last_names_from_list,
-                                       infer_prevailing_party)
+                                       infer_prevailing_party,
+                                       get_latest_courtlistener_run)
+from utils.judge_names import parse_judge_name, standardize_judges_raw
 
 
 # ------------------------------------------------------------------------------
@@ -350,7 +348,7 @@ def clean_llm_outcomes():
     """
     Get prevailing party and univariate scores, then save to CSV.
     """
-    cl_df = pd.read_csv(LLM_OPINION_CLF_RAW_PATH)
+    cl_df = pd.read_csv(LLM_OPINION_RAW_PATH)
     cl_df = infer_prevailing_party(cl_df)
 
     # reorder columns
@@ -361,59 +359,10 @@ def clean_llm_outcomes():
     ]]
 
     # save to CSV
-    LLM_OPINION_CLF_PATH.parent.mkdir(parents=True, exist_ok=True)
-    cl_df.to_csv(LLM_OPINION_CLF_PATH, index=False)
-    print(f"Saved cleaned CourtListener outcomes to {LLM_OPINION_CLF_PATH}")
+    LLM_OPINION_PATH.parent.mkdir(parents=True, exist_ok=True)
+    cl_df.to_csv(LLM_OPINION_PATH, index=False)
+    print(f"Saved cleaned CourtListener outcomes to {LLM_OPINION_PATH}")
     return cl_df
-
-
-def clean_llm_judges() -> pd.DataFrame:
-    """
-    Clean judge data extracted via LLM: extract last names, extract first three judges from each sequence, and save to CSV.
-
-    Returns:
-        Cleaned dataframe with normalized judge columns and added columns for panel_judge_1/2/3 and author_judge_1/2/3.
-    """
-    df = pd.read_csv(LLM_JUDGES_CLF_RAW_PATH)
-
-    # drop case outcomes from the judge data
-    # TODO: handle the unified Gemini output more gracefully later
-    df = df.drop(columns=["district_outcome", "disposition"], errors="ignore")
-
-    # normalize judge names
-    panel_values = standardize_judge_string(df["panel_judges"])
-    author_values = standardize_judge_string(df["opinion_authors"])
-
-    # identify en banc and per curiam cases
-    df["en_banc"] = panel_values.str.contains("EN BANC",
-                                              regex=False).astype(int)
-    df["per_curiam"] = author_values.str.contains("PER CURIAM",
-                                                  regex=False).astype(int)
-    panel_values = panel_values.str.replace("EN BANC", "", regex=False)
-    author_values = author_values.str.replace("PER CURIAM", "", regex=False)
-
-    # split the semicolon-delimited string into list of judges
-    panel_extracted = panel_values.str.split("; ")
-    author_extracted = author_values.str.split("; ")
-
-    # pull just the last name of each judge
-    panel_extracted = panel_extracted.apply(extract_last_names_from_list)
-    author_extracted = author_extracted.apply(extract_last_names_from_list)
-
-    # pull the first 3 judges from each list (panel and author)
-    df["panel_judge_1"] = panel_extracted.str[0].fillna("")
-    df["panel_judge_2"] = panel_extracted.str[1].fillna("")
-    df["panel_judge_3"] = panel_extracted.str[2].fillna("")
-
-    df["author_judge_1"] = author_extracted.str[0].fillna("")
-    df["author_judge_2"] = author_extracted.str[1].fillna("")
-    df["author_judge_3"] = author_extracted.str[2].fillna("")
-
-    # save to CSV
-    LLM_JUDGES_CLF_PATH.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(LLM_JUDGES_CLF_PATH, index=False)
-    print(f"Saved cleaned CourtListener judges to {LLM_JUDGES_CLF_PATH}")
-    return df
 
 
 def clean_courtlistener_judges(df: pd.DataFrame) -> pd.DataFrame:
@@ -435,7 +384,7 @@ def clean_courtlistener_judges(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
 
     # standardize (all caps, strip whitespace)
-    judge_values = standardize_judge_string(df["judge"])
+    judge_values = standardize_judges_raw(df["judge"])
 
     # normalize "and" variants (Oxford comma and bare "and")
     judge_values = judge_values.str.replace(", AND ",
@@ -470,7 +419,7 @@ def clean_courtlistener_judges(df: pd.DataFrame) -> pd.DataFrame:
                 continue
             if token.replace(".", "") in suffix_tokens:  # drop suffix tokens
                 continue
-            last_name = extract_last_name(token)
+            last_name = parse_judge_name(token)["last"]
             if last_name:
                 last_names.append(last_name)
         return last_names
@@ -508,7 +457,15 @@ def merge_cluster_metadata_w_llm_features(cluster_metadata_path: str,
     llm_outcomes_df = pd.read_csv(llm_outcomes_path, dtype={"opinion_id": str})
     llm_outcomes_df = llm_outcomes_df.rename(
         columns={"model_id": "outcomes_model_id"})
-    judges_df = pd.read_csv(llm_judges_path, dtype={"opinion_id": str})
+    id_cols = [f"panel_judge_nid_{k}" for k in range(1, 4)]
+    judges_df = pd.read_csv(llm_judges_path,
+                            dtype={
+                                "opinion_id": str,
+                                **{
+                                    c: "Int64"
+                                    for c in id_cols
+                                }
+                            })
     judges_df = judges_df.rename(columns={"model_id": "judges_model_id"})
 
     # Merge cluster metadata to LLM-extracted features using lead_opinion_id from cluster metadata
@@ -556,17 +513,7 @@ def merge_cluster_metadata_w_llm_features(cluster_metadata_path: str,
 
 def clean_courtlistener_clusters_main():
     # Find the most recent run directory
-    # TODO: maybe move this to separate function or pass as parameter
-    run_dirs = sorted([
-        d for d in COURTLISTENER_RAW_DIR.iterdir()
-        if d.is_dir() and d.name.startswith('run_')
-    ])
-    if not run_dirs:
-        raise FileNotFoundError(
-            f"No run directories found in {COURTLISTENER_RAW_DIR}")
-
-    latest_run_dir = run_dirs[-1]
-    print(f"Using run directory: {latest_run_dir.name}")
+    latest_run_dir = get_latest_courtlistener_run()
 
     cluster_metadata_path = latest_run_dir / "cluster_metadata.csv"
     opinion_metadata_path = latest_run_dir / "opinion_metadata.csv"
@@ -578,13 +525,12 @@ def clean_courtlistener_clusters_main():
 
     clean_llm_outcomes(
     )  # save a copy of the LLM-coded outcomes and adds a column for prevailing party
-    clean_llm_judges()  # save a cleaned copy of LLM-coded judges data
 
     # Merge LLM-coded outcomes and judges with cluster metadata
     merge_cluster_metadata_w_llm_features(
         cluster_metadata_path=str(COURTLISTENER_CLUSTER_CLEANED_PATH),
-        llm_outcomes_path=str(LLM_OPINION_CLF_PATH),
-        llm_judges_path=str(LLM_JUDGES_CLF_PATH),
+        llm_outcomes_path=str(LLM_OPINION_PATH),
+        llm_judges_path=str(LLM_JUDGES_PATH),
         output_path=str(COURTLISTENER_METADATA_W_FTRS_PATH))
 
     print("Done!")

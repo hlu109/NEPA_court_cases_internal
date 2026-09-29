@@ -19,8 +19,8 @@ from utils.config import (
     AG_TEST_ASSIGNMENTS_PATH,
     ADELGLICKS_CLEANED_PATH,
     COURTLISTENER_CLUSTER_CLEANED_PATH,
-    LLM_OPINION_CLF_PATH,
-    LLM_JUDGES_CLF_PATH,
+    LLM_OPINION_PATH,
+    LLM_JUDGES_PATH,
     INTERMEDIATE_DATA_DIR,
     FTR_PREDICTIONS_DIR,
 )
@@ -264,8 +264,7 @@ def evaluate_courtlistener_judges() -> tuple[pd.DataFrame, pd.DataFrame]:
             "lead_opinion_id": str
         },
     )
-    pred_judges_df = pd.read_csv(LLM_JUDGES_CLF_PATH,
-                                 dtype={"opinion_id": str})
+    pred_judges_df = pd.read_csv(LLM_JUDGES_PATH, dtype={"opinion_id": str})
     pred_judges_subset = pred_judges_df[[
         "opinion_id",
         "panel_judge_1",
@@ -344,20 +343,13 @@ def evaluate_courtlistener_judges() -> tuple[pd.DataFrame, pd.DataFrame]:
         int) == per_curiam_eval["per_curiam_pred"].astype(int)).mean())
 
     metrics_df = pd.DataFrame([{
-        "target":
-        "cl_judge_panel_set",
-        "n":
-        int(diagnostics_df["judge_jaccard_score"].notna().sum()),
-        "mean_iou":
-        float(diagnostics_df["judge_jaccard_score"].mean()),
-        "median_iou":
-        float(diagnostics_df["judge_jaccard_score"].median()),
-        "exact_set_match_rate":
-        float((true_sets == pred_sets).mean()),
-        "cl_per_curiam_accuracy":
-        per_curiam_accuracy,
-        "missing_predictions":
-        missing_predictions,
+        "target": "cl_judge_panel_set",
+        "n": int(diagnostics_df["judge_jaccard_score"].notna().sum()),
+        "mean_iou": float(diagnostics_df["judge_jaccard_score"].mean()),
+        "median_iou": float(diagnostics_df["judge_jaccard_score"].median()),
+        "exact_set_match_rate": float((true_sets == pred_sets).mean()),
+        "cl_per_curiam_accuracy": per_curiam_accuracy,
+        "missing_predictions": missing_predictions,
     }])
 
     return metrics_df, diagnostics_df
@@ -388,10 +380,8 @@ def evaluate_split(
                             "cluster_id": str,
                             "lead_opinion_id": str
                         })
-    pred_outcomes_df = pd.read_csv(LLM_OPINION_CLF_PATH,
-                                   dtype={"opinion_id": str})
-    pred_judges_df = pd.read_csv(LLM_JUDGES_CLF_PATH,
-                                 dtype={"opinion_id": str})
+    pred_outcomes_df = pd.read_csv(LLM_OPINION_PATH, dtype={"opinion_id": str})
+    pred_judges_df = pd.read_csv(LLM_JUDGES_PATH, dtype={"opinion_id": str})
 
     assert "lead_opinion_id" in cl_df.columns, "lead_opinion_id missing from CourtListener cluster metadata"
     assert "opinion_id" in pred_outcomes_df.columns, "opinion_id missing from LLM coded outcomes"

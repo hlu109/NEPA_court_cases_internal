@@ -75,13 +75,20 @@ FTR_PREDICTIONS_DIR = INTERMEDIATE_DATA_DIR / "Feature Classification Prediction
 CL_TRAIN_PREDICTIONS_PATH = FTR_PREDICTIONS_DIR / "CL_train_predictions.csv"
 
 # TODO: merge the gemini output paths
-LLM_OPINION_CLF_RAW_PATH = INTERMEDIATE_DATA_DIR / "gemini_output" / _GEMINI_RUN_ID / f"{_GEMINI_RUN_ID}.csv"
-LLM_OPINION_CLF_PATH = FTR_PREDICTIONS_DIR / "LLM_case_outcome_coding.csv"
+LLM_OPINION_RAW_PATH = INTERMEDIATE_DATA_DIR / "gemini_output" / _GEMINI_RUN_ID / f"{_GEMINI_RUN_ID}.csv"
+LLM_OPINION_PATH = FTR_PREDICTIONS_DIR / "LLM_case_outcome_coding.csv"
 
-LLM_JUDGES_CLF_RAW_PATH = INTERMEDIATE_DATA_DIR / "gemini_output" / _GEMINI_RUN_ID / f"{_GEMINI_RUN_ID}.csv"
-LLM_JUDGES_CLF_PATH = FTR_PREDICTIONS_DIR / "LLM_judge_coding.csv"
+LLM_JUDGES_RAW_PATH = INTERMEDIATE_DATA_DIR / "gemini_output" / _GEMINI_RUN_ID / f"{_GEMINI_RUN_ID}.csv"
+LLM_JUDGES_PATH = FTR_PREDICTIONS_DIR / "LLM_judge_coding.csv"
 
 COURTLISTENER_METADATA_W_FTRS_PATH = FTR_PREDICTIONS_DIR / "courtlistener_metadata_w_extracted_features.csv"
+
+# judge data
+FJC_RAW_DIR = RAW_DATA_DIR / "FJC judges"
+JUDGESHIPS_CLEAN_PATH = JUDGES_OUTPUT_DIR / "judgeships_clean.csv"
+JUDGE_CASE_CROSSWALK_PATH = JUDGES_OUTPUT_DIR / "judge_case_crosswalk.csv"
+JUDGE_MATCH_SUMMARY_PATH = JUDGES_OUTPUT_DIR / "match_summary.csv"
+NAME_TYPO_REVIEW_PATH = JUDGES_OUTPUT_DIR / "name_typo_review.csv"
 
 # other misc file paths
 USGOV_PL_PATH = INTERMEDIATE_DATA_DIR / "usgov_plaintiffs_MB_04022026.csv"

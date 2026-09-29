@@ -6,7 +6,7 @@ import pandas as pd
 from pathlib import Path
 
 from utils.config import (
-    LLM_OPINION_CLF_PATH,
+    LLM_OPINION_PATH,
     INTERMEDIATE_DATA_DIR,
 )
 
@@ -29,8 +29,8 @@ def main():
     """
     Load LLM opinion coding data and compute frequency counts for each variable.
     """
-    print(f"Loading data from: {LLM_OPINION_CLF_PATH}")
-    df = pd.read_csv(LLM_OPINION_CLF_PATH, dtype={"opinion_id": str})
+    print(f"Loading data from: {LLM_OPINION_PATH}")
+    df = pd.read_csv(LLM_OPINION_PATH, dtype={"opinion_id": str})
 
     print(f"\nTotal observations: {len(df)}")
     print(f"\nColumns: {', '.join(df.columns.tolist())}")
