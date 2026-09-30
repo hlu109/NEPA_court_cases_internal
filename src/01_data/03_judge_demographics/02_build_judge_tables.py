@@ -109,6 +109,39 @@ def main():
     judgeships["char_dem"] = (judgeships["appointing_party"] == "Democratic"
                               ).astype(float).where(has_party)
 
+    # determine whether the judge was formerly a federal prosecutor before starting their judgeship
+    career = pd.DataFrame({
+        "fjc_nid": fjc_career["nid"],
+        "text": fjc_career["Professional Career"].fillna("")
+    })
+    # extract the first year that appears in the text string (usually has the format "start year - end year")
+    career["start_year"] = pd.to_numeric(
+        career["text"].str.extract(r"\b(1[6-9]\d\d|20\d\d)\b")[0],
+        errors="coerce")
+    # patterns for federal prosecutor roles - assistant us attorney, us attorney
+    fedpros_patterns = {
+        "char_fedpros_ausa": r"(?i)\b(assistant|deputy)\s+U\.S\.\s+attorney|assistant United States attorney",
+        "char_fedpros_usa": r"(?i)(?<!assistant )(?<!deputy )\bU\.S\.\s+attorney\b(?! general)",
+    }
+    for col, pattern in fedpros_patterns.items():
+        career[col] = career["text"].str.contains(pattern)
+
+    judgeships["appointment_year"] = judgeships["date_service_start"].dt.year
+    career = judgeships[["judgeship_id", "fjc_nid",
+                         "appointment_year"]].merge(career,
+                                                    on="fjc_nid",
+                                                    how="left")
+    # check if the federal prosecutor role started before the judgeship (if the year is missing, assume it counts for now)
+    prior = (career["start_year"]
+             <= career["appointment_year"]) | career["start_year"].isna()
+    fedpros_cols = list(fedpros_patterns)
+    for col in fedpros_cols:
+        career[col] = (career[col].fillna(False) & prior).astype(int)
+    # construct single umbrella flag against all federal prosecutor roles
+    fedpros = career.groupby("judgeship_id")[fedpros_cols].max()
+    fedpros["char_fedpros"] = fedpros[fedpros_cols].max(axis=1)
+    judgeships = judgeships.merge(fedpros, on="judgeship_id", how="left")
+
     # get demographic data
     demo = pd.DataFrame({
         "fjc_nid": fjc_demographics["nid"],
@@ -194,7 +227,9 @@ def main():
     ]
     race_cols = ["race_raw"] + RACE_IND_COLS + ["char_poc"]
     demo_cols = ["birth_year", "gender", "char_female"]
-    judgeships = judgeships[id_cols + party_cols + race_cols + demo_cols]
+    career_cols = ["char_fedpros", "char_fedpros_ausa", "char_fedpros_usa"]
+    judgeships = judgeships[id_cols + party_cols + race_cols + demo_cols +
+                            career_cols]
 
     # reformat date variables for export
     for col in ["date_service_start", "date_termination"]:

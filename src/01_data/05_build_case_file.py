@@ -497,7 +497,10 @@ def merge_cluster_metadata_w_llm_features(cluster_metadata_path: str,
         "rep": "char_rep",
         "dem": "char_dem",
         "female": "char_female",
-        "poc": "char_poc"
+        "poc": "char_poc",
+        "fedpros": "char_fedpros",
+        "fedpros_usa": "char_fedpros_usa",
+        "fedpros_ausa": "char_fedpros_ausa"
     }
     for demographic, col_name in judge_chars.items():
         panel_cols = [f"panel_judge_{demographic}_{k}" for k in range(1, 4)]
