@@ -15,5 +15,5 @@ STEPS = [
 
 if __name__ == "__main__":
     for step in STEPS:
-        print(f"\n{'=' * 60}\n{step}\n{'=' * 60}")
+        print(f"\n{'=' * 30}\n{step}\n{'=' * 30}")
         importlib.import_module(step).main()

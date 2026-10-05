@@ -243,10 +243,13 @@ def main():
         wide[f"panel_judge_match_{k}"] = _panel_values("match_status", k,
                                                        np.nan)
 
-    # flag opinions where the first 3 panel judges are all successfully matched
-    wide["panel_all_matched"] = (wide[[
-        f"panel_judge_match_{k}" for k in range(1, N_WIDE_PANEL_JUDGES + 1)
-    ]] == "matched").all(axis=1).astype(int)
+    # flag opinions where every listed panel judge is matched to a unique FJC judge
+    n_matched = wide["opinion_id"].map(
+        matched[matched["match_status"] == "matched"].groupby(
+            "opinion_id").size()).fillna(0)
+    wide["panel_all_matched"] = (
+        (wide["panel_judge_count"] > 0) &
+        (n_matched == wide["panel_judge_count"])).astype(int)
 
     # export
     LLM_JUDGES_PATH.parent.mkdir(parents=True, exist_ok=True)
